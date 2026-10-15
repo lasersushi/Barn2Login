@@ -40,10 +40,16 @@ Everything is one Next.js app on Vercel. There is no separate bot process.
 ```
 Vercel (Next.js, TypeScript)
 ├── /kiosk                    iPad page: camera QR scan + backup code display
+│                             (one-time setup with KIOSK_SECRET sets a kiosk cookie)
 ├── /admin                    mentor UI: roster, review queue, overrides
+│                             (Discord login; ADMIN_DISCORD_IDS lists mentors)
+├── /api/auth/discord/*       mentor OAuth login + callback
 ├── /api/discord/interactions Discord slash commands (HTTP interactions)
-├── /api/redeem/[token]       one-time link; captures member IP, issues QR
+├── /redeem/[token]           page the one-time link opens; its JS POSTs below
+├── /api/redeem/[token]       captures member IP, issues QR (POST only, so link
+│                             previewers can't burn the one-time link)
 ├── /api/scan                 kiosk POSTs scanned token, gets verdict + identity
+│                             (rejected without the kiosk cookie)
 ├── /api/backup/claim         redeems a backup code submitted via Discord
 └── /api/cron/nightly         auto-close, heartbeat, backup export, digest
         │

@@ -1,0 +1,49 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+type Issued = { firstName: string; qrDataUrl: string; expiresAt: string };
+type State = { status: "loading" } | { status: "error"; message: string } | ({ status: "ok" } & Issued);
+
+export function Redeem({ token }: { token: string }) {
+  const [state, setState] = useState<State>({ status: "loading" });
+  // React's dev-mode Strict Mode runs effects twice. The link is single-use,
+  // so a second POST would fail and replace the QR with an error.
+  const requested = useRef(false);
+
+  useEffect(() => {
+    if (requested.current) return;
+    requested.current = true;
+
+    fetch(`/api/redeem/${encodeURIComponent(token)}`, { method: "POST" })
+      .then(async (res) => {
+        const body = await res.json();
+        setState(res.ok ? { status: "ok", ...body } : { status: "error", message: body.error });
+      })
+      .catch(() => setState({ status: "error", message: "Couldn't reach the server. Check your connection and try again." }));
+  }, [token]);
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6 text-center">
+      {state.status === "loading" && <p className="text-lg">Getting your code…</p>}
+
+      {state.status === "error" && <p className="text-lg">{state.message}</p>}
+
+      {state.status === "ok" && (
+        <>
+          <h1 className="text-2xl font-semibold">Hi {state.firstName}</h1>
+          {/* A plain <img> so it can be long-pressed and saved to Photos. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={state.qrDataUrl} alt="Your sign-in QR code" className="w-full rounded-lg bg-white" />
+          <p className="text-lg">
+            Scan this at the kiosk. Works once, until <strong>{state.expiresAt}</strong>.
+          </p>
+          <ul className="space-y-1 text-sm text-zinc-500">
+            <li>Turn your screen brightness up.</li>
+            <li>Long-press the code to save it to Photos in case this page closes.</li>
+          </ul>
+        </>
+      )}
+    </main>
+  );
+}
