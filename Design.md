@@ -109,16 +109,17 @@ create table adjustments (
   created_at  timestamptz not null default now()
 );
 
--- short-lived, single-use credentials for both paths
+-- short-lived, single-use credentials for all paths
 create table pending_codes (
   id          uuid primary key default gen_random_uuid(),
-  member_id   uuid not null references members(id),
-  kind        text not null,                -- qr | backup
+  member_id   uuid references members(id),  -- null for backup codes until redeemed
+  kind        text not null,                -- redeem | qr | backup
   code_hash   text not null,
   expires_at  timestamptz not null,
   used_at     timestamptz,
   ip_status   text,                         -- recorded at issue time (qr only)
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  check (kind = 'backup' or member_id is not null)
 );
 create index on pending_codes (code_hash) where used_at is null;
 ```

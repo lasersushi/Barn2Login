@@ -53,18 +53,20 @@ create table adjustments (
   created_at  timestamptz not null default now()
 );
 
--- Short-lived, single-use credentials for both sign-in paths.
+-- Short-lived, single-use credentials for all sign-in paths.
 create table pending_codes (
   id          uuid primary key default gen_random_uuid(),
-  member_id   uuid not null references members(id),
+  member_id   uuid references members(id),  -- null for backup codes until redeemed
   kind        text not null
-              check (kind in ('qr', 'backup')),
+              check (kind in ('redeem', 'qr', 'backup')),
   code_hash   text not null,
   expires_at  timestamptz not null,
   used_at     timestamptz,
   ip_status   text                          -- recorded at issue time (qr only)
               check (ip_status in ('verified', 'off_network', 'unverifiable')),
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  -- Only backup codes are issued before the member is known (kiosk-first).
+  check (kind = 'backup' or member_id is not null)
 );
 create index on pending_codes (code_hash) where used_at is null;
 
