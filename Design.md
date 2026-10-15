@@ -69,7 +69,7 @@ create table members (
   id              uuid primary key default gen_random_uuid(),
   first_name      text not null,
   last_name       text not null,
-  grad_year       int  not null,
+  grad_year       int,                      -- null for mentors
   subteam         text,
   discord_id      text unique,              -- null until linked
   photo_url       text,                     -- Supabase Storage
@@ -118,6 +118,7 @@ create table pending_codes (
   expires_at  timestamptz not null,
   used_at     timestamptz,
   ip_status   text,                         -- recorded at issue time (qr only)
+  ip_address  inet,                         -- raw IP at issue time (qr only), see §6
   created_at  timestamptz not null default now(),
   check (kind = 'backup' or member_id is not null)
 );

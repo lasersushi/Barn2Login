@@ -125,7 +125,7 @@ export type Database = {
           created_at: string
           discord_id: string | null
           first_name: string
-          grad_year: number
+          grad_year: number | null
           id: string
           last_name: string
           photo_url: string | null
@@ -137,7 +137,7 @@ export type Database = {
           created_at?: string
           discord_id?: string | null
           first_name: string
-          grad_year: number
+          grad_year?: number | null
           id?: string
           last_name: string
           photo_url?: string | null
@@ -149,7 +149,7 @@ export type Database = {
           created_at?: string
           discord_id?: string | null
           first_name?: string
-          grad_year?: number
+          grad_year?: number | null
           id?: string
           last_name?: string
           photo_url?: string | null
@@ -164,6 +164,7 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          ip_address: unknown
           ip_status: string | null
           kind: string
           member_id: string | null
@@ -174,6 +175,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
+          ip_address?: unknown
           ip_status?: string | null
           kind: string
           member_id?: string | null
@@ -184,6 +186,7 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
+          ip_address?: unknown
           ip_status?: string | null
           kind?: string
           member_id?: string | null
