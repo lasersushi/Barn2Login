@@ -2,7 +2,7 @@ import { InteractionResponseFlags, InteractionResponseType } from "discord-inter
 import { issueRedeemCode, REDEEM_TTL_MIN } from "@/db/codes";
 import { findMemberByDiscordId } from "@/db/members";
 import { signOutAll } from "@/db/sessions";
-import { isAdminDiscordId } from "@/lib/auth";
+import { hasAdminRole } from "@/lib/auth";
 import { requireEnv } from "@/lib/env";
 import type { Interaction, InteractionResponse } from "@/discord/types";
 
@@ -49,12 +49,11 @@ async function signIn(interaction: Interaction): Promise<InteractionResponse> {
   );
 }
 
-// Leadership's end-of-day command. The server-side check is the real guard:
-// anyone in the server can see the command, but only Discord IDs listed in
-// ADMIN_DISCORD_IDS can run it.
+// Leadership's end-of-day command. Anyone in the server can see it, but only
+// members with the ADMIN_ROLE_ID role can run it. In a DM there's no member,
+// so no roles, so it's refused.
 async function signOutEveryone(interaction: Interaction): Promise<InteractionResponse> {
-  const discordId = interaction.member?.user.id ?? interaction.user?.id;
-  if (!discordId || !isAdminDiscordId(discordId)) {
+  if (!hasAdminRole(interaction.member?.roles)) {
     return reply("Only team leadership can sign everyone out.");
   }
 

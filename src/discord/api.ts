@@ -33,6 +33,19 @@ export async function fetchGuildMembers(): Promise<GuildMember[]> {
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
+// The role IDs a user has in the team server, or [] if they aren't in it.
+// Fetching one member doesn't need Server Members Intent; listing them does.
+export async function fetchMemberRoles(discordId: string): Promise<string[]> {
+  const res = await fetch(
+    `${API}/guilds/${requireEnv("DISCORD_GUILD_ID")}/members/${encodeURIComponent(discordId)}`,
+    { headers: { Authorization: `Bot ${requireEnv("DISCORD_BOT_TOKEN")}` }, cache: "no-store" },
+  );
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Discord returned ${res.status} looking up a member's roles.`);
+  const member = (await res.json()) as { roles: string[] };
+  return member.roles;
+}
+
 // ---------------------------------------------------------------------------
 // OAuth2 for mentor login. Scope "identify" only: we need the user's ID.
 // ---------------------------------------------------------------------------

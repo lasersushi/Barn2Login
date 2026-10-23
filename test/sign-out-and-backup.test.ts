@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GET as nightly } from "@/app/api/cron/nightly/route";
 import { signOutAll } from "@/db/sessions";
 import { handleCommand } from "@/discord/commands";
+import { isAdmin } from "@/lib/auth";
 import { toCsv } from "@/lib/csv";
 import { sql } from "./db-client";
 
@@ -53,32 +54,70 @@ describe("signOutAll", () => {
 });
 
 describe("/sign-out-all command", () => {
-  const interaction = (discordId: string) => ({
+  const interaction = (roles?: string[]) => ({
     id: "1",
     type: 2,
     token: "t",
     data: { name: "sign-out-all" },
-    member: { user: { id: discordId, username: "someone" } },
+    member: { user: { id: "user-1", username: "someone" }, roles },
   });
 
-  it("refuses anyone not in ADMIN_DISCORD_IDS, and signs nobody out", async () => {
+  it("refuses anyone without the leadership role, and signs nobody out", async () => {
     const id = await openSession(await addMember());
-    const res = await handleCommand(interaction("random-member"));
-    expect(res.data?.content).toMatch(/Only team leadership/);
+    for (const roles of [undefined, [], ["role-member"]]) {
+      const res = await handleCommand(interaction(roles));
+      expect(res.data?.content).toMatch(/Only team leadership/);
+    }
     expect((await session(id)).check_out_at).toBeNull();
+  });
+
+  it("refuses when run in a DM, where there are no roles", async () => {
+    const res = await handleCommand({ id: "1", type: 2, token: "t", data: { name: "sign-out-all" }, user: { id: "u", username: "u" } });
+    expect(res.data?.content).toMatch(/Only team leadership/);
   });
 
   it("signs everyone out for leadership and lists them", async () => {
     await openSession(await addMember("Ada", "Lovelace"));
     await openSession(await addMember("Grace", "Hopper"));
-    const res = await handleCommand(interaction("mentor-1"));
+    const res = await handleCommand(interaction(["role-member", "role-leadership"]));
     expect(res.data?.content).toBe("Signed out 2: Grace Hopper, Ada Lovelace");
     expect(res.data?.flags).toBe(64);
   });
 
   it("says so when nobody is signed in", async () => {
-    const res = await handleCommand(interaction("mentor-1"));
+    const res = await handleCommand(interaction(["role-leadership"]));
     expect(res.data?.content).toBe("Nobody was signed in.");
+  });
+});
+
+describe("isAdmin (website login)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function discordReturns(status: number, body: unknown) {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("looks up the member's roles in the team server with the bot token", async () => {
+    const fetchMock = discordReturns(200, { roles: ["role-leadership"] });
+    expect(await isAdmin("user-1")).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/guilds/guild-1/members/user-1",
+      expect.objectContaining({ headers: { Authorization: "Bot test-bot-token" } }),
+    );
+  });
+
+  it("is false without the role, or when they aren't in the server", async () => {
+    discordReturns(200, { roles: ["role-member"] });
+    expect(await isAdmin("user-1")).toBe(false);
+    discordReturns(404, { message: "Unknown Member" });
+    expect(await isAdmin("user-1")).toBe(false);
+  });
+
+  it("fails closed when Discord errors", async () => {
+    discordReturns(500, {});
+    await expect(isAdmin("user-1")).rejects.toThrow();
   });
 });
 

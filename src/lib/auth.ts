@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { fetchMemberRoles } from "@/discord/api";
 import { hmac, safeEqual } from "@/lib/crypto";
 import { requireEnv } from "@/lib/env";
 
@@ -37,16 +38,19 @@ export function unseal<T>(value: string | undefined): T | null {
 }
 
 // ---------------------------------------------------------------------------
-// Admin: mentors sign in with Discord. ADMIN_DISCORD_IDS is a comma-separated
-// list of Discord user IDs. It is re-checked on every request, so removing
-// someone from the list revokes their access immediately.
+// Admin: anyone with the ADMIN_ROLE_ID role in the team server. Mentors sign
+// in to /admin with Discord, and the role is re-checked on every request, so
+// taking the role away in Discord revokes access immediately.
 // ---------------------------------------------------------------------------
 
-export function isAdminDiscordId(discordId: string): boolean {
-  return requireEnv("ADMIN_DISCORD_IDS")
-    .split(",")
-    .map((id) => id.trim())
-    .includes(discordId);
+// For slash commands: Discord includes the member's roles in the payload.
+export function hasAdminRole(roles: string[] | undefined): boolean {
+  return roles?.includes(requireEnv("ADMIN_ROLE_ID")) ?? false;
+}
+
+// For the website: login only gives us a user ID, so ask Discord for roles.
+export async function isAdmin(discordId: string): Promise<boolean> {
+  return hasAdminRole(await fetchMemberRoles(discordId));
 }
 
 type AdminSession = { discordId: string; exp: number };
@@ -62,7 +66,7 @@ export async function clearAdminSession() {
 
 export async function getAdmin(): Promise<{ discordId: string } | null> {
   const session = unseal<AdminSession>((await cookies()).get(ADMIN_COOKIE)?.value);
-  if (!session || session.exp < Date.now() || !isAdminDiscordId(session.discordId)) {
+  if (!session || session.exp < Date.now() || !(await isAdmin(session.discordId))) {
     return null;
   }
   return { discordId: session.discordId };

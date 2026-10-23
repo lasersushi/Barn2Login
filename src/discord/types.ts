@@ -16,8 +16,8 @@ export type Interaction = {
     name: string;
     options?: CommandOption[];
   };
-  // Present when the command is used in a server.
-  member?: { user: { id: string; username: string } };
+  // Present when the command is used in a server. roles are role IDs.
+  member?: { user: { id: string; username: string }; roles?: string[] };
   // Present when the command is used in a DM.
   user?: { id: string; username: string };
 };
