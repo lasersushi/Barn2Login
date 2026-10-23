@@ -14,6 +14,10 @@ const commands = [
     name: "sign-in",
     description: "Get a one-time QR code to scan at the kiosk (signs you in or out)",
   },
+  {
+    name: "sign-out-all",
+    description: "Leadership only: sign out everyone who is still signed in",
+  },
 ];
 
 const appId = process.env.DISCORD_APPLICATION_ID;

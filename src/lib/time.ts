@@ -18,3 +18,14 @@ export function formatDuration(from: Date, to: Date): string {
   const minutes = totalMin % 60;
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
+
+const dateFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: ZONE,
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
+export function formatDate(date: Date): string {
+  return dateFormat.format(date);
+}

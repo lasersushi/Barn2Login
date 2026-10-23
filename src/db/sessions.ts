@@ -81,3 +81,52 @@ export async function scanQr(token: string): Promise<ScanResult> {
     return { ok: true, action: "check_in", member: scanned, checkInAt: opened.check_in_at } as const;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Closing sessions without a tap. These, and the tap above, are the only
+// UPDATEs sessions ever gets: check_out_at and closed_by, and only on open
+// sessions (CLAUDE.md invariant #2).
+// ---------------------------------------------------------------------------
+
+export type OpenSession = {
+  member_id: string;
+  first_name: string;
+  last_name: string;
+  check_in_at: Date;
+};
+
+export async function listOpenSessions(): Promise<OpenSession[]> {
+  return db()<OpenSession[]>`
+    select s.member_id, m.first_name, m.last_name, s.check_in_at
+    from sessions s
+    join members m on m.id = s.member_id
+    where s.check_out_at is null
+    order by m.last_name, m.first_name
+  `;
+}
+
+// Leadership's end-of-day sign-out (/sign-out-all in Discord, or the button
+// on /admin), and the per-person version. Credits time up to now, the same
+// as if each member had tapped out themselves. Returns who was signed out.
+export async function signOutAll(): Promise<{ first_name: string; last_name: string }[]> {
+  return db()<{ first_name: string; last_name: string }[]>`
+    with closed as (
+      update sessions
+      set check_out_at = now(), closed_by = 'admin'
+      where check_out_at is null
+      returning member_id
+    )
+    select m.first_name, m.last_name
+    from closed c
+    join members m on m.id = c.member_id
+    order by m.last_name, m.first_name
+  `;
+}
+
+export async function signOutMember(memberId: string): Promise<void> {
+  await db()`
+    update sessions
+    set check_out_at = now(), closed_by = 'admin'
+    where member_id = ${memberId} and check_out_at is null
+  `;
+}

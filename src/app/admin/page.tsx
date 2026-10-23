@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { fetchGuildMembers, type GuildMember } from "@/discord/api";
 import { listMembers, type Member } from "@/db/members";
+import { listOpenSessions } from "@/db/sessions";
 import { requireAdmin } from "@/lib/auth";
+import { formatDate, formatTime } from "@/lib/time";
 import {
   addMemberAction,
   linkDiscordAction,
   logoutAction,
   setActiveAction,
+  signOutAllAction,
+  signOutMemberAction,
   unlinkDiscordAction,
 } from "./actions";
 
@@ -22,7 +26,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   await requireAdmin();
   const { error } = await searchParams;
 
-  const members = await listMembers();
+  const [members, open] = await Promise.all([listMembers(), listOpenSessions()]);
   let guild: GuildMember[] = [];
   let guildError: string | null = null;
   try {
@@ -52,6 +56,30 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           &quot;Server Members Intent&quot; is on in the Developer Portal&apos;s Bot tab.
         </p>
       )}
+
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Signed in now ({open.length})</h2>
+          {open.length > 0 && (
+            <form action={signOutAllAction}>
+              <button className="rounded-md bg-black px-3 py-1 text-white">Sign out everyone</button>
+            </form>
+          )}
+        </div>
+        {open.length === 0 && <p className="text-zinc-500">Nobody is signed in.</p>}
+        {open.map((s) => (
+          <form key={s.member_id} action={signOutMemberAction} className="flex items-center gap-3">
+            <input type="hidden" name="memberId" value={s.member_id} />
+            <span className="w-48 font-medium">
+              {s.first_name} {s.last_name}
+            </span>
+            <span className="text-sm text-zinc-500">
+              since {formatDate(s.check_in_at)}, {formatTime(s.check_in_at)}
+            </span>
+            <button className="text-xs underline">Sign out</button>
+          </form>
+        ))}
+      </section>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Needs a Discord link ({unlinked.length})</h2>

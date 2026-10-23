@@ -281,18 +281,24 @@ that fires more often fails at deploy time. Timing is guaranteed only within
 the hour and is UTC-only, so schedule `0 10 * * *` — roughly 2–3am Pacific
 either side of DST, safely outside any meeting.
 
-The job does four things:
+The job does three things:
 
-1. **Auto-close** open sessions, clamping `check_out_at` to the meeting's
-   `ends_at`, setting `closed_by='auto'` and adding an `auto_closed` flag.
-   Never credit the full elapsed time; never silently zero it.
-2. **Heartbeat** — a trivial write, which keeps the Supabase free project from
+1. **Heartbeat** — a trivial query, which keeps the Supabase free project from
    pausing after 7 days of inactivity. Matters over the summer.
-3. **Backup export** — dump `sessions` and `adjustments` to CSV into Supabase
-   Storage. The free tier has no automated backups and these hours are a
+2. **Backup export** — dump `members` (minus `token_hash`), `sessions` and
+   `adjustments` to CSV in a private `backups` Storage bucket, one folder per
+   day. The free tier has no automated backups and these hours are a
    graduation requirement.
-4. **Digest** — post to a mentor-only Discord channel: full attendance for the
+3. **Digest** — post to a mentor-only Discord channel: full attendance for the
    meeting, the flagged-session list, and the backup-to-QR ratio.
+
+**Closing forgotten sessions is manual, by decision.** Leadership signs
+everyone out at the end of the day with `/sign-out-all` in Discord (limited
+to `ADMIN_DISCORD_IDS`), or with the buttons under "Signed in now" on
+`/admin`. These close at the current time with `closed_by='admin'` and no
+flag — the same as each member tapping out. There is no automatic close: if
+leadership forgets, an open session stays open and the member's next scan
+closes it, so the "longer than 8 hours" flag (§9) is what catches it.
 
 **Separately:** a meeting-end-minus-15 reminder pinging everyone with an open
 session. This directly attacks the largest source of bad data and is the one

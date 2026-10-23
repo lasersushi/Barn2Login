@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createMember, linkDiscord, setActive, unlinkDiscord } from "@/db/members";
+import { signOutAll, signOutMember } from "@/db/sessions";
 import { clearAdminSession, requireAdmin } from "@/lib/auth";
 
 // Every action re-checks the mentor's session: Server Actions can be called
@@ -49,6 +50,18 @@ export async function unlinkDiscordAction(formData: FormData) {
 export async function setActiveAction(formData: FormData) {
   await requireAdmin();
   await setActive(text(formData, "memberId"), text(formData, "active") === "true");
+  revalidatePath("/admin");
+}
+
+export async function signOutAllAction() {
+  await requireAdmin();
+  await signOutAll();
+  revalidatePath("/admin");
+}
+
+export async function signOutMemberAction(formData: FormData) {
+  await requireAdmin();
+  await signOutMember(text(formData, "memberId"));
   revalidatePath("/admin");
 }
 

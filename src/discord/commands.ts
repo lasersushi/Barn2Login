@@ -1,6 +1,8 @@
 import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
 import { issueRedeemCode, REDEEM_TTL_MIN } from "@/db/codes";
 import { findMemberByDiscordId } from "@/db/members";
+import { signOutAll } from "@/db/sessions";
+import { isAdminDiscordId } from "@/lib/auth";
 import { requireEnv } from "@/lib/env";
 import type { Interaction, InteractionResponse } from "@/discord/types";
 
@@ -17,6 +19,8 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
       return reply("Pong!");
     case "sign-in":
       return signIn(interaction);
+    case "sign-out-all":
+      return signOutEveryone(interaction);
     default:
       return reply("Unknown command.");
   }
@@ -43,6 +47,24 @@ async function signIn(interaction: Interaction): Promise<InteractionResponse> {
     `Tap to get your sign-in QR code (works once, expires in ${REDEEM_TTL_MIN} minutes):\n${link}`,
     SUPPRESS_EMBEDS,
   );
+}
+
+// Leadership's end-of-day command. The server-side check is the real guard:
+// anyone in the server can see the command, but only Discord IDs listed in
+// ADMIN_DISCORD_IDS can run it.
+async function signOutEveryone(interaction: Interaction): Promise<InteractionResponse> {
+  const discordId = interaction.member?.user.id ?? interaction.user?.id;
+  if (!discordId || !isAdminDiscordId(discordId)) {
+    return reply("Only team leadership can sign everyone out.");
+  }
+
+  const signedOut = await signOutAll();
+  if (signedOut.length === 0) return reply("Nobody was signed in.");
+
+  const names = signedOut.map((m) => `${m.first_name} ${m.last_name}`).join(", ");
+  const message = `Signed out ${signedOut.length}: ${names}`;
+  // Discord rejects messages over 2,000 characters.
+  return reply(message.length <= 2000 ? message : `Signed out ${signedOut.length} people.`);
 }
 
 // Ephemeral replies are visible only to the member who ran the command.

@@ -24,6 +24,9 @@ export default defineConfig({
       KIOSK_SECRET: "test-kiosk-secret",
       APP_BASE_URL: "https://barn2.test",
       ADMIN_DISCORD_IDS: "mentor-1",
+      CRON_SECRET: "test-cron-secret",
+      SUPABASE_URL: "https://supabase.test",
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-key",
     },
   },
 });
