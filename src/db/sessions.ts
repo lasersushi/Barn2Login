@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "@/db/client";
+import { db } from "@/db/client";
 import { consumeCode } from "@/db/codes";
 
 // A check-in matches the meeting it falls in. Members who arrive up to an
@@ -27,7 +27,7 @@ export type ScanResult =
 // only on whether the member has an open session (Design.md §5a step 6).
 // One transaction: the code is consumed only if the session write succeeds.
 export async function scanQr(token: string): Promise<ScanResult> {
-  return sql.begin(async (tx) => {
+  return db().begin(async (tx) => {
     const code = await consumeCode(tx, "qr", token);
     if (!code?.member_id) return { ok: false, reason: "invalid" } as const;
 

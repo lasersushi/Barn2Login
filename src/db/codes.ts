@@ -1,6 +1,6 @@
 import "server-only";
 import type postgres from "postgres";
-import { sql } from "@/db/client";
+import { db } from "@/db/client";
 import { randomToken, sha256Hex } from "@/lib/crypto";
 
 // The spec sets the QR TTL (Design.md §5a). The redeem link TTL is not in the
@@ -50,7 +50,7 @@ async function issueCode(
 
 // Step 2 of /sign-in: the one-time link the bot sends.
 export async function issueRedeemCode(memberId: string) {
-  return issueCode(sql, { kind: "redeem", memberId, ttlMin: REDEEM_TTL_MIN });
+  return issueCode(db(), { kind: "redeem", memberId, ttlMin: REDEEM_TTL_MIN });
 }
 
 export type RedeemResult =
@@ -61,7 +61,7 @@ export type RedeemResult =
 // issue the QR they'll show the kiosk. ip_status stays null until IP
 // enforcement is built (Design.md §12 step 10); the raw IP is logged now.
 export async function redeemForQr(redeemToken: string, ipAddress: string | null): Promise<RedeemResult> {
-  return sql.begin(async (tx) => {
+  return db().begin(async (tx) => {
     const redeem = await consumeCode(tx, "redeem", redeemToken);
     if (!redeem?.member_id) return { ok: false } as const;
 

@@ -9,3 +9,7 @@ export const sql = postgres({
   prepare: false,
   max: 1,
 });
+
+export function db(): postgres.Sql {
+  return sql;
+}
