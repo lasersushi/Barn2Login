@@ -42,7 +42,7 @@ Vercel (Next.js, TypeScript)
 ├── /kiosk                    iPad page: camera QR scan + backup code display
 │                             (one-time setup with KIOSK_SECRET sets a kiosk cookie)
 ├── /admin                    mentor UI: roster, review queue, overrides
-│                             (Discord login; needs the ADMIN_ROLE_ID role)
+│                             (Discord login; needs an ADMIN_ROLE_IDS role)
 ├── /api/auth/discord/*       mentor OAuth login + callback
 ├── /api/discord/interactions Discord slash commands (HTTP interactions)
 ├── /redeem/[token]           page the one-time link opens; its JS POSTs below
@@ -294,7 +294,7 @@ The job does three things:
 
 **Closing forgotten sessions is manual, by decision.** Leadership signs
 everyone out at the end of the day with `/sign-out-all` in Discord (limited
-to members with the `ADMIN_ROLE_ID` role), or with the buttons under "Signed in now" on
+to members with one of the `ADMIN_ROLE_IDS` roles), or with the buttons under "Signed in now" on
 `/admin`. These close at the current time with `closed_by='admin'` and no
 flag — the same as each member tapping out. There is no automatic close: if
 leadership forgets, an open session stays open and the member's next scan

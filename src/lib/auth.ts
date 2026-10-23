@@ -38,14 +38,19 @@ export function unseal<T>(value: string | undefined): T | null {
 }
 
 // ---------------------------------------------------------------------------
-// Admin: anyone with the ADMIN_ROLE_ID role in the team server. Mentors sign
-// in to /admin with Discord, and the role is re-checked on every request, so
-// taking the role away in Discord revokes access immediately.
+// Admin: anyone with one of the ADMIN_ROLE_IDS roles in the team server
+// (comma-separated role IDs). Mentors sign in to /admin with Discord, and
+// roles are re-checked on every request, so taking the role away in Discord
+// revokes access immediately.
 // ---------------------------------------------------------------------------
 
 // For slash commands: Discord includes the member's roles in the payload.
 export function hasAdminRole(roles: string[] | undefined): boolean {
-  return roles?.includes(requireEnv("ADMIN_ROLE_ID")) ?? false;
+  const adminRoles = requireEnv("ADMIN_ROLE_IDS")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return roles?.some((role) => adminRoles.includes(role)) ?? false;
 }
 
 // For the website: login only gives us a user ID, so ask Discord for roles.

@@ -23,7 +23,7 @@ export default defineConfig({
       SESSION_SECRET: "test-session-secret",
       KIOSK_SECRET: "test-kiosk-secret",
       APP_BASE_URL: "https://barn2.test",
-      ADMIN_ROLE_ID: "role-leadership",
+      ADMIN_ROLE_IDS: "role-captain, role-leadership,role-mentor",
       DISCORD_GUILD_ID: "guild-1",
       DISCORD_BOT_TOKEN: "test-bot-token",
       CRON_SECRET: "test-cron-secret",

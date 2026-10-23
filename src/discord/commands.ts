@@ -50,7 +50,7 @@ async function signIn(interaction: Interaction): Promise<InteractionResponse> {
 }
 
 // Leadership's end-of-day command. Anyone in the server can see it, but only
-// members with the ADMIN_ROLE_ID role can run it. In a DM there's no member,
+// members with one of the ADMIN_ROLE_IDS roles can run it. In a DM there's no member,
 // so no roles, so it's refused.
 async function signOutEveryone(interaction: Interaction): Promise<InteractionResponse> {
   if (!hasAdminRole(interaction.member?.roles)) {

@@ -71,6 +71,13 @@ describe("/sign-out-all command", () => {
     expect((await session(id)).check_out_at).toBeNull();
   });
 
+  it("accepts any of the listed leadership roles", async () => {
+    for (const role of ["role-captain", "role-leadership", "role-mentor"]) {
+      const res = await handleCommand(interaction([role]));
+      expect(res.data?.content).toBe("Nobody was signed in.");
+    }
+  });
+
   it("refuses when run in a DM, where there are no roles", async () => {
     const res = await handleCommand({ id: "1", type: 2, token: "t", data: { name: "sign-out-all" }, user: { id: "u", username: "u" } });
     expect(res.data?.content).toMatch(/Only team leadership/);
