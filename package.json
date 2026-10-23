@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "discord:register": "node --env-file=.env.local scripts/register-commands.mts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "discord:check": "node --env-file=.env.local scripts/discord-check.mts"
   },
   "dependencies": {
     "discord-interactions": "^4.4.0",
