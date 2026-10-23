@@ -94,7 +94,16 @@ export function Kiosk() {
 
   return (
     <main className="relative flex h-screen flex-col items-center justify-center gap-6 overflow-hidden bg-zinc-950 p-8 text-white">
-      <video ref={videoRef} className={`max-h-[60vh] rounded-2xl ${armed ? "" : "hidden"}`} muted playsInline />
+      {/*
+        Never hide the video with display:none. qr-scanner treats a hidden
+        video as a Safari playback hazard and permanently forces it to
+        opacity 0 and zero size, so the live feed would never appear.
+        Before Start it's only transparent and out of the layout.
+        The wrapper is also where qr-scanner draws its scan-region box.
+      */}
+      <div className={armed ? "relative" : "pointer-events-none absolute opacity-0"}>
+        <video ref={videoRef} className="max-h-[70vh] max-w-full rounded-2xl" muted playsInline />
+      </div>
 
       {!armed && (
         <div className="flex flex-col items-center gap-4 text-center">
