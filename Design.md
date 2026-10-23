@@ -51,7 +51,7 @@ Vercel (Next.js, TypeScript)
 ├── /api/scan                 kiosk POSTs scanned token, gets verdict + identity
 │                             (rejected without the kiosk cookie)
 ├── /api/backup/claim         redeems a backup code submitted via Discord
-└── /api/cron/nightly         auto-close, heartbeat, backup export, digest
+└── /api/cron/nightly         heartbeat, backup export, digest
         │
         └── Supabase Postgres (service role key, server-side only)
 ```
@@ -227,6 +227,17 @@ An `/admin` action that creates a session with `source='admin'` and records
 which mentor did it. This is the only path that works with a dead phone, no
 Discord account, or a network outage. It is not optional — build it in v0.
 
+Two forms, both inserts only, both with `created_by` set to the mentor's own
+`members` row (so a mentor must be on the roster with Discord linked) and an
+`admin_override` flag (§9):
+
+- **Sign in now** — opens a session at the current time. The member signs
+  out the normal way (scan, `/admin`, or `/sign-out-all`).
+- **Record a past session** — a closed session from a Pacific date, start
+  and end, for when nobody could scan. Rejected if it ends in the future or
+  overlaps an existing session for that member (an open session counts as
+  running until now), since either would count time twice.
+
 ## 6. IP classification
 
 The school's egress IP(s) define "on campus."
@@ -300,17 +311,10 @@ flag — the same as each member tapping out. There is no automatic close: if
 leadership forgets, an open session stays open and the member's next scan
 closes it, so the "longer than 8 hours" flag (§9) is what catches it.
 
-**Separately:** a meeting-end-minus-15 reminder pinging everyone with an open
-session. This directly attacks the largest source of bad data and is the one
-thing a Discord-native system does better than a physical kiosk. If Vercel's
-one-cron-per-day limit blocks this, trigger it from GitHub Actions cron
-(free) against the same route — the limit is on Vercel's scheduler, not on
-the route itself.
-
 ## 9. Flags and review
 
 Auto-flag a session when it is `source='backup'` or `source='admin'`,
-`ip_status != 'verified'`, `closed_by='auto'`, longer than 8 hours, or created
+`ip_status != 'verified'`, longer than 8 hours, or created
 within 60 seconds of another backup redemption. `/admin` sorts by flag count.
 
 Target: a mentor reviews a handful of sessions a week, not the whole roster.
@@ -353,7 +357,7 @@ Ship each step before starting the next.
 4. `/sign-in` → redeem link → QR issue (no IP check yet, log IPs only)
 5. Kiosk page: scan → `/api/scan` → name + photo display
 6. Backup code path
-7. Nightly cron: auto-close + heartbeat + export
+7. Nightly cron: heartbeat + export (closing sessions is manual, see §8)
 8. Digest and flags
 9. Mentor override
 10. **IP enforcement last**, once two weeks of logged addresses show what the

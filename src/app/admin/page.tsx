@@ -8,6 +8,8 @@ import {
   addMemberAction,
   linkDiscordAction,
   logoutAction,
+  overrideRecordSessionAction,
+  overrideSignInAction,
   setActiveAction,
   signOutAllAction,
   signOutMemberAction,
@@ -20,6 +22,14 @@ const ERRORS: Record<string, string> = {
   "invalid-member": "First and last name are required, and grad year must be a number.",
   "pick-account": "Pick a Discord account to link.",
   "already-linked": "That Discord account is already linked to someone else.",
+  "mentor-not-on-roster":
+    "To sign someone in, add yourself to the roster and link your Discord account first, so the record shows who did it.",
+  inactive: "That member is inactive. Reactivate them first.",
+  already_signed_in: "They're already signed in.",
+  "invalid-session": "Pick a member, a date, a start time, and an end time.",
+  end_before_start: "The session has to end after it starts.",
+  in_future: "That session hasn't ended yet. Use Sign in instead.",
+  overlap: "That overlaps a session they already have, which would count the time twice.",
 };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -39,6 +49,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const linkedIds = new Set(members.map((m) => m.discord_id).filter(Boolean));
   const linkable = guild.filter((g) => !linkedIds.has(g.id));
   const unlinked = members.filter((m) => !m.discord_id && m.active);
+  const signedIn = new Set(open.map((s) => s.member_id));
+  const active = members.filter((m) => m.active);
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
@@ -116,6 +128,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <th>Subteam</th>
               <th>Discord</th>
               <th>Status</th>
+              <th>Sign-in</th>
             </tr>
           </thead>
           <tbody>
@@ -142,10 +155,47 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     <button className="text-xs underline">{m.active ? "Active — deactivate" : "Inactive — reactivate"}</button>
                   </form>
                 </td>
+                <td>
+                  {signedIn.has(m.id) ? (
+                    <span className="text-xs text-emerald-700">Signed in</span>
+                  ) : m.active ? (
+                    // Override for a dead phone or no Discord. Signs out the normal way.
+                    <form action={overrideSignInAction}>
+                      <input type="hidden" name="memberId" value={m.id} />
+                      <button className="text-xs underline">Sign in now</button>
+                    </form>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xl font-semibold">Record a past session</h2>
+        <p className="text-sm text-zinc-500">
+          For when someone was there but couldn&apos;t scan (kiosk or Wi-Fi down). Times are Pacific. It&apos;s
+          recorded under your name and flagged for review.
+        </p>
+        <form action={overrideRecordSessionAction} className="flex flex-wrap items-center gap-3">
+          <select name="memberId" required defaultValue="" className="rounded-md border border-zinc-300 px-2 py-1">
+            <option value="" disabled>
+              Member…
+            </option>
+            {active.map((m) => (
+              <option key={m.id} value={m.id}>
+                {fullName(m)}
+              </option>
+            ))}
+          </select>
+          <input name="date" type="date" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <input name="start" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <span>to</span>
+          <input name="end" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <input name="note" placeholder="Why (optional)" className="rounded-md border border-zinc-300 px-2 py-1" />
+          <button className="rounded-md bg-black px-3 py-1 text-white">Record</button>
+        </form>
       </section>
 
       <section className="flex flex-col gap-3">
