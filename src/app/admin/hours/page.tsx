@@ -11,8 +11,7 @@ export const metadata: Metadata = { title: "Hours" };
 const ERRORS: Record<string, string> = {
   "invalid-period": "A period needs a name, a start date, and an end date.",
   "period-end-before-start": "The period has to end on or after the day it starts.",
-  "mentor-not-on-roster":
-    "To create a period, add yourself to the roster and link your Discord account first, so the record shows who made it.",
+  "mentor-not-on-roster": "You're not on the roster yet. Open the roster page once to sync it with Discord, then try again.",
 };
 
 export default async function HoursPage({
@@ -62,7 +61,6 @@ export default async function HoursPage({
           <thead className="text-zinc-500">
             <tr>
               <th className="py-2">Name</th>
-              <th>Grad year</th>
               <th className="text-right">Sessions</th>
               <th className="text-right">Hours</th>
             </tr>
@@ -74,7 +72,6 @@ export default async function HoursPage({
                   {m.first_name} {m.last_name}
                   {!m.active && " (inactive)"}
                 </td>
-                <td>{m.grad_year ?? "Mentor"}</td>
                 <td className="text-right">{m.sessions}</td>
                 <td className="text-right font-medium">{formatHours(m.minutes)}</td>
               </tr>

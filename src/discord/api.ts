@@ -7,28 +7,45 @@ export type GuildMember = {
   id: string;
   username: string;
   displayName: string;
+  roles: string[];
 };
 
-// Everyone in the team server, for the roster's link dropdown.
+// What the server shows: the server nickname, else the account's display
+// name, else the username.
+export function discordDisplayName(nick: string | null | undefined, user: DiscordUser): string {
+  return nick || user.global_name || user.username;
+}
+
+type DiscordUser = { id: string; username: string; global_name?: string | null; bot?: boolean };
+
+const PAGE_SIZE = 1000; // Discord's maximum per request
+
+// Everyone in the team server; the roster is synced from this.
 // Requires "Server Members Intent" on the Bot tab of the Developer Portal.
 export async function fetchGuildMembers(): Promise<GuildMember[]> {
-  const res = await fetch(`${API}/guilds/${requireEnv("DISCORD_GUILD_ID")}/members?limit=1000`, {
-    headers: { Authorization: `Bot ${requireEnv("DISCORD_BOT_TOKEN")}` },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Discord returned ${res.status} listing server members.`);
+  const all: { nick: string | null; roles: string[]; user: DiscordUser }[] = [];
+  // Pages are ordered by user ID; "after" continues from the last one seen.
+  let after = "0";
+  for (;;) {
+    const res = await fetch(
+      `${API}/guilds/${requireEnv("DISCORD_GUILD_ID")}/members?limit=${PAGE_SIZE}&after=${after}`,
+      { headers: { Authorization: `Bot ${requireEnv("DISCORD_BOT_TOKEN")}` }, cache: "no-store" },
+    );
+    if (!res.ok) {
+      throw new Error(`Discord returned ${res.status} listing server members.`);
+    }
+    const page = (await res.json()) as typeof all;
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    after = page[page.length - 1].user.id;
   }
-  const members = (await res.json()) as {
-    nick: string | null;
-    user: { id: string; username: string; global_name: string | null; bot?: boolean };
-  }[];
-  return members
+  return all
     .filter((m) => !m.user.bot)
     .map((m) => ({
       id: m.user.id,
       username: m.user.username,
-      displayName: m.nick ?? m.user.global_name ?? m.user.username,
+      displayName: discordDisplayName(m.nick, m.user),
+      roles: m.roles,
     }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }

@@ -53,6 +53,13 @@ export function hasAdminRole(roles: string[] | undefined): boolean {
   return roles?.some((role) => adminRoles.includes(role)) ?? false;
 }
 
+// The roster is everyone with the MEMBER_ROLE_ID role, plus leadership and
+// mentors (ADMIN_ROLE_IDS) so overrides can record which of them acted.
+export function belongsOnRoster(roles: string[] | undefined): boolean {
+  const memberRole = requireEnv("MEMBER_ROLE_ID").trim();
+  return (roles?.includes(memberRole) ?? false) || hasAdminRole(roles);
+}
+
 // For the website: login only gives us a user ID, so ask Discord for roles.
 export async function isAdmin(discordId: string): Promise<boolean> {
   return hasAdminRole(await fetchMemberRoles(discordId));

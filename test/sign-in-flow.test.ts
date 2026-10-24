@@ -133,23 +133,52 @@ describe("POST /api/scan", () => {
 });
 
 describe("/sign-in command", () => {
-  const interaction = (discordId: string) => ({
+  const interaction = (discordId: string, roles: string[] | undefined, nick: string | null = "Ada Lovelace") => ({
     id: "1",
     type: 2,
     token: "t",
     data: { name: "sign-in" },
-    member: { user: { id: discordId, username: "ada" } },
+    member: { user: { id: discordId, username: "ada", global_name: null }, roles, nick },
   });
 
-  it("tells unlinked members to ask a mentor", async () => {
-    const res = await handleCommand(interaction("nobody"));
-    expect(res.data?.content).toMatch(/isn't linked/);
+  const rowFor = async (discordId: string) =>
+    (await sql`select first_name, last_name, active from members where discord_id = ${discordId}`)[0];
+
+  it("refuses people without the member role, and doesn't add them", async () => {
+    for (const roles of [undefined, [], ["role-other"]]) {
+      const res = await handleCommand(interaction("nobody", roles));
+      expect(res.data?.content).toMatch(/need the member role/);
+    }
+    expect(await rowFor("nobody")).toBeUndefined();
   });
 
-  it("sends linked members a private one-time link with no preview", async () => {
-    await addMember({ discordId: "ada-discord" });
-    const res = await handleCommand(interaction("ada-discord"));
+  it("refuses in a DM, where there are no roles", async () => {
+    const res = await handleCommand({
+      id: "1",
+      type: 2,
+      token: "t",
+      data: { name: "sign-in" },
+      user: { id: "ada-discord", username: "ada" },
+    });
+    expect(res.data?.content).toMatch(/in the Barn 2 server/);
+  });
+
+  it("adds a member to the roster on their first /sign-in and sends a private one-time link", async () => {
+    const res = await handleCommand(interaction("ada-discord", ["role-member"]));
     expect(res.data?.content).toMatch(/https:\/\/barn2\.test\/redeem\/[\w-]{43}/);
     expect(res.data?.flags).toBe(64 | 4);
+    expect(await rowFor("ada-discord")).toEqual({ first_name: "Ada", last_name: "Lovelace", active: true });
+  });
+
+  it("lets leadership sign in without the member role", async () => {
+    const res = await handleCommand(interaction("captain-discord", ["role-captain"]));
+    expect(res.data?.content).toMatch(/redeem/);
+  });
+
+  it("reuses the same row, picking up a new nickname and reactivating", async () => {
+    const id = await addMember({ discordId: "ada-discord", active: false });
+    await handleCommand(interaction("ada-discord", ["role-member"], "Ada King"));
+    expect(await rowFor("ada-discord")).toEqual({ first_name: "Ada", last_name: "King", active: true });
+    expect(await sql`select id from members`).toEqual([{ id }]);
   });
 });

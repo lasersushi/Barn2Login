@@ -12,7 +12,8 @@
     "lint": "eslint",
     "discord:register": "node --env-file=.env.local scripts/register-commands.mts",
     "test": "vitest run",
-    "discord:check": "node --env-file=.env.local scripts/discord-check.mts"
+    "discord:check": "node --env-file=.env.local scripts/discord-check.mts",
+    "roster:reset": "node --env-file=.env.local scripts/reset-roster.mts"
   },
   "dependencies": {
     "discord-interactions": "^4.4.0",

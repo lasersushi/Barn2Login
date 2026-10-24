@@ -1,8 +1,9 @@
 import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
 import { issueRedeemCode, REDEEM_TTL_MIN } from "@/db/codes";
-import { findMemberByDiscordId } from "@/db/members";
+import { upsertMember } from "@/db/members";
 import { signOutAll } from "@/db/sessions";
-import { hasAdminRole } from "@/lib/auth";
+import { discordDisplayName } from "@/discord/api";
+import { belongsOnRoster, hasAdminRole } from "@/lib/auth";
 import { requireEnv } from "@/lib/env";
 import type { Interaction, InteractionResponse } from "@/discord/types";
 
@@ -29,17 +30,21 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
 // Design.md §5a steps 1–2: reply privately with a one-time link. Tapping it
 // is the only moment we see the member's real IP; Discord's servers are the
 // ones calling this route.
+//
+// Having the member role is what puts someone on the roster, so their first
+// /sign-in creates their row; nobody has to add them first.
 async function signIn(interaction: Interaction): Promise<InteractionResponse> {
-  const discordId = interaction.member?.user.id ?? interaction.user?.id;
-  if (!discordId) return reply("Couldn't tell who you are. Try again from the team server.");
+  // In a DM there's no member, so no roles to check.
+  const discord = interaction.member;
+  if (!discord) return reply("Run /sign-in in the Barn 2 server.");
+  if (!belongsOnRoster(discord.roles)) {
+    return reply("You need the member role in the Barn 2 server to sign in. Ask leadership if that's a mistake.");
+  }
 
-  const member = await findMemberByDiscordId(discordId);
-  if (!member) {
-    return reply("Your Discord account isn't linked to the roster yet. Ask a mentor to link you.");
-  }
-  if (!member.active) {
-    return reply("Your roster entry is inactive. Talk to a mentor if that's a mistake.");
-  }
+  const member = await upsertMember({
+    discordId: discord.user.id,
+    displayName: discordDisplayName(discord.nick, discord.user),
+  });
 
   const { token } = await issueRedeemCode(member.id);
   const link = `${requireEnv("APP_BASE_URL")}/redeem/${token}`;

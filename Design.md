@@ -249,7 +249,7 @@ which mentor did it. This is the only path that works with a dead phone, no
 Discord account, or a network outage. It is not optional — build it in v0.
 
 Two forms, both inserts only, both with `created_by` set to the mentor's own
-`members` row (so a mentor must be on the roster with Discord linked) and an
+`members` row (leadership roles are synced onto the roster, §11) and an
 `admin_override` flag (§9):
 
 - **Sign in now** — opens a session at the current time. The member signs
@@ -359,13 +359,28 @@ it before anyone complains.
 
 ## 11. Onboarding
 
-Every member needs a Discord account, server membership, and a `discord_id`
-linked to their roster row before their hours count. Freshmen in September
-will have none of this.
+The Discord server is the roster. Nobody is added by hand: a new member joins
+the server, leadership gives them the member role (`MEMBER_ROLE_ID`), and they
+can sign in. This replaced an earlier design where mentors added people and
+linked Discord accounts by hand, which kept two lists that drifted apart.
 
-Build an admin page listing unlinked members prominently, with a dropdown to
-map each to a Discord user. Less code than a `/link` flow, and Mr. J is doing
-roster admin anyway.
+- The roster is everyone with the member role, plus anyone with an
+  `ADMIN_ROLE_IDS` role (so overrides can record which mentor acted).
+- **Sync** runs every time `/admin` loads: it adds or reactivates everyone who
+  should be on the roster and deactivates everyone else (lost the role, left
+  the server). Deactivating is a soft delete; hours stay. A sync that finds
+  nobody with the role is refused instead of deactivating the whole team.
+- **`/sign-in`** checks the role from the interaction payload and creates or
+  reactivates the caller's row on the spot, so a new member can sign in
+  before anyone opens `/admin`.
+- **Names** come from the server nickname (else Discord display name, else
+  username), refreshed on every sync, split at the first space into
+  `first_name` / `last_name`. Members should set their server nickname to
+  their real name; it is what appears on the hours page.
+- `grad_year` and `subteam` are no longer filled in; the columns remain.
+
+`pnpm roster:reset` wiped the hand-built test roster before launch (and with
+it the test sessions). It is the only code that deletes from `sessions`.
 
 ## 12. Build order
 
