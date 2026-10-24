@@ -2,7 +2,7 @@
 
 Attendance and hours tracking for FRC Team 751 (Barn 2).
 
-**Status:** design complete, not yet built
+**Status:** in use (Barn2Robotics server)
 **Author:** Lucas Walker
 **Target:** operational before the 2027 season kickoff (January)
 
@@ -317,10 +317,35 @@ The job does three things:
 
 1. **Heartbeat** — a trivial query, which keeps the Supabase free project from
    pausing after 7 days of inactivity. Matters over the summer.
-2. **Backup export** — dump `members` (minus `token_hash`), `sessions`,
-   `adjustments` and `periods` to CSV in a private `backups` Storage bucket, one folder per
-   day. The free tier has no automated backups and these hours are a
-   graduation requirement.
+2. **Backup export** — the free tier has no automated backups, and these
+   hours are a graduation requirement, so the app makes its own. Each night
+   writes one folder per day to **two places**:
+   - a private `backups` Supabase Storage bucket, and
+   - a **Google Drive folder**, because a backup kept in the same account as
+     the database is lost with it. The Drive copy is readable by anyone with
+     Google Sheets, with no other tools.
+
+   Files: `hours.csv` (one row per person: name, status, all-time hours, one
+   column per period; the same numbers as `/admin/hours`), plus the source
+   records a restore would load: `members` (minus `token_hash`), `sessions`,
+   `adjustments` and `periods`. The Drive folder also keeps
+   `Hours (latest).csv` at its top level, replaced nightly. Each destination
+   is attempted even if the other fails; any failure makes the cron a 500.
+
+   **Drive setup** (once, by whoever should own the folder, e.g. Mr. J or a
+   team Google account):
+   1. Create a Drive folder. Its ID is the last part of its URL.
+   2. At script.google.com, create a project and paste in
+      `scripts/drive-backup.gs`. Fill in `FOLDER_ID`, and set `SECRET` to a
+      long random string.
+   3. Deploy → New deployment → Web app. Execute as: **Me**. Who has access:
+      **Anyone**. (The secret is what keeps others out; Apps Script can't
+      check headers.) Authorize when asked.
+   4. In Vercel, set `DRIVE_BACKUP_URL` to the web app URL and
+      `DRIVE_BACKUP_SECRET` to the same secret, then redeploy.
+
+   Without `DRIVE_BACKUP_URL` the Drive copy is skipped and the cron reports
+   `"drive": "not configured"`.
 3. **Digest** — post to a mentor-only Discord channel: full attendance for the
    meeting, the flagged-session list, and the backup-to-QR ratio.
 

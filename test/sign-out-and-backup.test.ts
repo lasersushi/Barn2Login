@@ -131,6 +131,19 @@ describe("isAdmin (website login)", () => {
 describe("GET /api/cron/nightly", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  // Answers every upload with success and records what was sent where.
+  function captureFetch() {
+    const uploads: { url: string; body: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        uploads.push({ url, body: String(init.body) });
+        return Response.json({ ok: true });
+      }),
+    );
+    return uploads;
+  }
+
   const request = (auth?: string) =>
     new Request("http://localhost/api/cron/nightly", { headers: auth ? { authorization: auth } : {} });
 
@@ -154,14 +167,92 @@ describe("GET /api/cron/nightly", () => {
     expect(res.status).toBe(200);
     expect(Object.keys(await res.json())).toEqual(["heartbeat", "backup"]);
     expect(uploads.map((u) => u.url.split("/").slice(-1)[0])).toEqual([
+      "hours.csv",
       "members.csv",
       "sessions.csv",
       "adjustments.csv",
       "periods.csv",
     ]);
     expect(uploads[0].url).toMatch(/^https:\/\/supabase\.test\/storage\/v1\/object\/backups\/\d{4}-\d{2}-\d{2}\//);
-    expect(uploads[0].body).not.toContain("secret-hash");
+    expect(uploads[1].body).not.toContain("secret-hash");
     expect((await session(id)).check_out_at).toBeNull();
+  });
+
+  it("writes a readable hours.csv with a column per period", async () => {
+    const ada = await addMember("Ada", "Lovelace");
+    await sql`
+      insert into sessions (member_id, check_in_at, check_out_at, source, closed_by) values
+        (${ada}, '2026-10-01 16:00-07', '2026-10-01 18:30-07', 'qr', 'tap'),
+        (${ada}, '2026-11-05 16:00-08', '2026-11-05 17:00-08', 'qr', 'tap')
+    `;
+    await sql`
+      insert into periods (name, starts_on, ends_on, created_by)
+      values ('October', '2026-10-01', '2026-10-31', ${ada})
+    `;
+    const uploads = captureFetch();
+
+    await nightly(request("Bearer test-cron-secret"));
+    const hours = uploads.find((u) => u.url.endsWith("/hours.csv"))!.body;
+    expect(hours).toBe(
+      '"First name","Last name","Status","All time (hours)","October, 2026-10-01 to 2026-10-31 (hours)"\n' +
+        '"Ada","Lovelace","Active","3.5","2.5"\n',
+    );
+  });
+
+  describe("Google Drive copy", () => {
+    afterEach(() => {
+      delete process.env.DRIVE_BACKUP_URL;
+      delete process.env.DRIVE_BACKUP_SECRET;
+    });
+
+    it("is skipped when not set up", async () => {
+      const uploads = captureFetch();
+      const res = await nightly(request("Bearer test-cron-secret"));
+      expect((await res.json()).backup.drive).toBe("not configured");
+      expect(uploads.every((u) => u.url.startsWith("https://supabase.test/"))).toBe(true);
+    });
+
+    it("posts the same files to the Apps Script with the shared secret", async () => {
+      process.env.DRIVE_BACKUP_URL = "https://script.google.test/exec";
+      process.env.DRIVE_BACKUP_SECRET = "drive-secret";
+      const uploads = captureFetch();
+
+      const res = await nightly(request("Bearer test-cron-secret"));
+      expect(res.status).toBe(200);
+      const drive = uploads.find((u) => u.url === "https://script.google.test/exec")!;
+      const body = JSON.parse(drive.body);
+      expect(body.secret).toBe("drive-secret");
+      expect(body.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(Object.keys(body.files)).toEqual([
+        "hours.csv",
+        "members.csv",
+        "sessions.csv",
+        "adjustments.csv",
+        "periods.csv",
+      ]);
+    });
+
+    it("still copies to Drive when Storage fails, and reports both failures", async () => {
+      process.env.DRIVE_BACKUP_URL = "https://script.google.test/exec";
+      process.env.DRIVE_BACKUP_SECRET = "drive-secret";
+      const calls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          calls.push(url);
+          return url.startsWith("https://supabase.test/")
+            ? new Response("Bucket not found", { status: 404 })
+            : new Response("<html>Script error</html>", { status: 200 });
+        }),
+      );
+
+      const res = await nightly(request("Bearer test-cron-secret"));
+      expect(res.status).toBe(500);
+      expect(calls).toContain("https://script.google.test/exec");
+      const { error } = (await res.json()).backup;
+      expect(error).toMatch(/Bucket not found/);
+      expect(error).toMatch(/Drive backup failed.*Script error/);
+    });
   });
 
   it("reports a 500 when the backup fails", async () => {
@@ -175,7 +266,8 @@ describe("GET /api/cron/nightly", () => {
 describe("toCsv", () => {
   it("quotes fields and escapes quotes, commas, and newlines", () => {
     expect(toCsv([{ a: 'say "hi"', b: "x,y", c: "line\nbreak", d: null }])).toBe(
-      'a,b,c,d\n"say ""hi""","x,y","line\nbreak",\n',
+      '"a","b","c","d"\n"say ""hi""","x,y","line\nbreak",\n',
     );
+    expect(toCsv([{ 'Build, "phase 1"': 1 }])).toBe('"Build, ""phase 1"""\n"1"\n');
   });
 });
