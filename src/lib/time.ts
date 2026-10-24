@@ -29,3 +29,21 @@ const dateFormat = new Intl.DateTimeFormat("en-US", {
 export function formatDate(date: Date): string {
   return dateFormat.format(date);
 }
+
+// A YYYY-MM-DD calendar date is already Pacific, so it's formatted as-is.
+// Treating it as an instant and converting would shift it by a day.
+const calendarFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+export function formatCalendarDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return calendarFormat.format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+export function formatHours(minutes: number): string {
+  return (minutes / 60).toFixed(1);
+}

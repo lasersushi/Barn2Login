@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { fetchGuildMembers, type GuildMember } from "@/discord/api";
 import { listMembers, type Member } from "@/db/members";
 import { listOpenSessions } from "@/db/sessions";
@@ -56,9 +57,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Roster</h1>
-        <form action={logoutAction}>
-          <button className="text-sm text-zinc-500 underline">Log out</button>
-        </form>
+        <div className="flex items-center gap-4">
+          <Link href="/admin/hours" className="text-sm underline">
+            Hours
+          </Link>
+          <form action={logoutAction}>
+            <button className="text-sm text-zinc-500 underline">Log out</button>
+          </form>
+        </div>
       </header>
 
       {error && ERRORS[error] && <p className="rounded-md bg-red-100 p-3 text-red-800">{ERRORS[error]}</p>}

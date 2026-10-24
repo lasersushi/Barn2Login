@@ -20,6 +20,7 @@ export async function exportBackups(): Promise<string[]> {
     `,
     "sessions.csv": await db()`select * from sessions order by check_in_at`,
     "adjustments.csv": await db()`select * from adjustments order by created_at`,
+    "periods.csv": await db()`select * from periods order by starts_on`,
   };
 
   const written: string[] = [];

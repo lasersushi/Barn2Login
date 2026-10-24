@@ -154,6 +154,27 @@ group by m.id;
 - "Why does this person have 43 hours" is answerable, row by row, with timestamps.
 - Open sessions contribute zero. Hours require both taps.
 
+**Periods.** Mentors total hours over named date ranges ("Preseason 2026",
+"Build season 2027") at `/admin/hours`. A period holds no hours, only a name
+and a range of Pacific calendar days, both ends included:
+
+```sql
+create table periods (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  starts_on   date not null,
+  ends_on     date not null,
+  created_by  uuid not null references members(id),
+  created_at  timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+```
+
+Totals for a period use the same math as `member_hours`, limited to sessions
+that *started* inside it and adjustments *entered* inside it (adjustments have
+no "applies to" date). Periods may overlap, and deleting one changes nobody's
+hours. "All time" on that page is the `member_hours` total.
+
 **Invariant:** a member may have at most one open session at a time. Enforce
 with a partial unique index:
 
@@ -296,8 +317,8 @@ The job does three things:
 
 1. **Heartbeat** — a trivial query, which keeps the Supabase free project from
    pausing after 7 days of inactivity. Matters over the summer.
-2. **Backup export** — dump `members` (minus `token_hash`), `sessions` and
-   `adjustments` to CSV in a private `backups` Storage bucket, one folder per
+2. **Backup export** — dump `members` (minus `token_hash`), `sessions`,
+   `adjustments` and `periods` to CSV in a private `backups` Storage bucket, one folder per
    day. The free tier has no automated backups and these hours are a
    graduation requirement.
 3. **Digest** — post to a mentor-only Discord channel: full attendance for the

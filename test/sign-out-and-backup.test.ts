@@ -157,6 +157,7 @@ describe("GET /api/cron/nightly", () => {
       "members.csv",
       "sessions.csv",
       "adjustments.csv",
+      "periods.csv",
     ]);
     expect(uploads[0].url).toMatch(/^https:\/\/supabase\.test\/storage\/v1\/object\/backups\/\d{4}-\d{2}-\d{2}\//);
     expect(uploads[0].body).not.toContain("secret-hash");

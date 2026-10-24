@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createPeriod, deletePeriod } from "@/db/hours";
 import { createMember, findMemberByDiscordId, linkDiscord, setActive, unlinkDiscord } from "@/db/members";
 import { overrideRecordSession, overrideSignIn, type OverrideResult } from "@/db/overrides";
 import { signOutAll, signOutMember } from "@/db/sessions";
@@ -66,12 +67,12 @@ export async function signOutMemberAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
-// Overrides record which mentor acted (sessions.created_by), so the mentor
-// needs their own roster entry with their Discord linked.
-async function requireMentorMember(): Promise<string> {
+// Overrides and periods record which mentor acted (created_by), so the
+// mentor needs their own roster entry with their Discord linked.
+async function requireMentorMember(page = "/admin"): Promise<string> {
   const admin = await requireAdmin();
   const mentor = await findMemberByDiscordId(admin.discordId);
-  if (!mentor) redirect("/admin?error=mentor-not-on-roster");
+  if (!mentor) redirect(`${page}?error=mentor-not-on-roster`);
   return mentor.id;
 }
 
@@ -98,6 +99,25 @@ export async function overrideRecordSessionAction(formData: FormData) {
   finishOverride(
     await overrideRecordSession({ memberId, mentorId, date, start, end, note: text(formData, "note") || null }),
   );
+}
+
+export async function createPeriodAction(formData: FormData) {
+  const createdBy = await requireMentorMember("/admin/hours");
+  const name = text(formData, "name");
+  const startsOn = text(formData, "startsOn");
+  const endsOn = text(formData, "endsOn");
+  const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (!name || !isDate(startsOn) || !isDate(endsOn)) redirect("/admin/hours?error=invalid-period");
+  // YYYY-MM-DD strings compare in date order.
+  if (endsOn < startsOn) redirect("/admin/hours?error=period-end-before-start");
+  const id = await createPeriod({ name, startsOn, endsOn, createdBy });
+  redirect(`/admin/hours?period=${id}`);
+}
+
+export async function deletePeriodAction(formData: FormData) {
+  await requireAdmin();
+  await deletePeriod(text(formData, "periodId"));
+  redirect("/admin/hours");
 }
 
 export async function logoutAction() {
