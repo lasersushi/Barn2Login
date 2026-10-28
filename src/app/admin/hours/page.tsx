@@ -153,8 +153,8 @@ export default async function HoursPage({
           <input
             name="hours"
             type="number"
-            min="0.25"
-            step="0.25"
+            min="0.01"
+            step="any"
             required
             placeholder="Hours"
             className="w-24 rounded-md border border-zinc-300 px-2 py-1"
