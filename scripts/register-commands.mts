@@ -15,6 +15,10 @@ const commands = [
     description: "Get a one-time QR code to scan at the kiosk (signs you in or out)",
   },
   {
+    name: "hours",
+    description: "See your hours, and how close you are to the next competition's requirement",
+  },
+  {
     name: "sign-out-all",
     description: "Leadership only: sign out everyone who is still signed in",
   },

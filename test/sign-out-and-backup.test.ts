@@ -165,7 +165,9 @@ describe("GET /api/cron/nightly", () => {
 
     const res = await nightly(request("Bearer test-cron-secret"));
     expect(res.status).toBe(200);
-    expect(Object.keys(await res.json())).toEqual(["heartbeat", "backup"]);
+    const body = await res.json();
+    expect(Object.keys(body)).toEqual(["heartbeat", "backup", "reminders"]);
+    expect(body.reminders).toBe("not configured");
     expect(uploads.map((u) => u.url.split("/").slice(-1)[0])).toEqual([
       "hours.csv",
       "members.csv",

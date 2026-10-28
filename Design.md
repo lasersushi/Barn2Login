@@ -339,7 +339,7 @@ that fires more often fails at deploy time. Timing is guaranteed only within
 the hour and is UTC-only, so schedule `0 10 * * *` — roughly 2–3am Pacific
 either side of DST, safely outside any meeting.
 
-The job does three things:
+The job does four things:
 
 1. **Heartbeat** — a trivial query, which keeps the Supabase free project from
    pausing after 7 days of inactivity. Matters over the summer.
@@ -374,6 +374,20 @@ The job does three things:
    `"drive": "not configured"`.
 3. **Digest** — post to a mentor-only Discord channel: full attendance for the
    meeting, the flagged-session list, and the backup-to-QR ratio.
+4. **Comp reminders** — 14, 7, 3 and 1 days before a competition, DM
+   everyone with the member role who is short on hours. The requirement is
+   env vars, not a table, so changing it means a redeploy:
+   - `COMP_DATE` (YYYY-MM-DD, Pacific). Unset turns reminders off.
+   - `COMP_HOURS_REQUIRED` (hours, e.g. `30`).
+   - `COMP_HOURS_FROM` (optional YYYY-MM-DD): count only hours from this day
+     to `COMP_DATE`, with the same rules as a period. Unset counts all time.
+   - `COMP_NAME` (optional), used in the messages.
+   - `MENTOR_CHANNEL_ID` (optional): where the bot posts who it DMed and who
+     has DMs closed, so a mentor can tell those people in person.
+
+   Mentors don't have the member role, so they aren't reminded. Members can
+   check themselves anytime with `/hours` (private reply: all-time hours,
+   plus progress toward the competition while one is set).
 
 **Closing forgotten sessions is manual, by decision.** Leadership signs
 everyone out at the end of the day with `/sign-out-all` in Discord (limited

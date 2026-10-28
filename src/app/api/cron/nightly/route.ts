@@ -1,5 +1,6 @@
 import { db } from "@/db/client";
 import { exportBackups } from "@/db/backup";
+import { sendCompReminders } from "@/discord/reminders";
 import { safeEqual } from "@/lib/crypto";
 import { requireEnv } from "@/lib/env";
 
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
   // from pausing after 7 days idle (Design.md §8), e.g. over the summer.
   await run("heartbeat", async () => (await db()`select now() as at`)[0].at);
   await run("backup", exportBackups);
+  await run("reminders", sendCompReminders);
 
   return Response.json(results, { status: failed ? 500 : 200 });
 }

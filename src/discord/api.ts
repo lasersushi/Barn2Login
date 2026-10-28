@@ -64,6 +64,61 @@ export async function fetchMemberRoles(discordId: string): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Sending messages as the bot. No gateway needed: these are plain REST calls.
+// ---------------------------------------------------------------------------
+
+// Discord's error code for "this person doesn't accept DMs from server
+// members" (or has blocked the bot). That's their setting, not a failure.
+const CANNOT_DM = 50007;
+
+// Nothing the bot sends should ping anyone, even if a nickname is "@everyone".
+const NO_PINGS = { parse: [] };
+
+// POST as the bot, waiting out one rate limit if Discord asks.
+async function botPost(path: string, body: object): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${requireEnv("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (res.status !== 429 || attempt > 0) return res;
+    const { retry_after } = (await res.json()) as { retry_after: number };
+    await new Promise((resolve) => setTimeout(resolve, retry_after * 1000));
+  }
+}
+
+async function errorCode(res: Response): Promise<number | undefined> {
+  return ((await res.json().catch(() => ({}))) as { code?: number }).code;
+}
+
+// DMs someone from the bot. Returns false if they don't accept DMs; any
+// other problem throws.
+export async function sendDirectMessage(discordId: string, content: string): Promise<boolean> {
+  const channelRes = await botPost("/users/@me/channels", { recipient_id: discordId });
+  if (!channelRes.ok) {
+    if ((await errorCode(channelRes)) === CANNOT_DM) return false;
+    throw new Error(`Discord returned ${channelRes.status} opening a DM.`);
+  }
+  const { id } = (await channelRes.json()) as { id: string };
+
+  const messageRes = await botPost(`/channels/${id}/messages`, { content, allowed_mentions: NO_PINGS });
+  if (messageRes.ok) return true;
+  if ((await errorCode(messageRes)) === CANNOT_DM) return false;
+  throw new Error(`Discord returned ${messageRes.status} sending a DM.`);
+}
+
+// Posts in a server channel. The bot needs "Send Messages" there.
+export async function postChannelMessage(channelId: string, content: string): Promise<void> {
+  const res = await botPost(`/channels/${encodeURIComponent(channelId)}/messages`, {
+    content,
+    allowed_mentions: NO_PINGS,
+  });
+  if (!res.ok) throw new Error(`Discord returned ${res.status} posting to channel ${channelId}.`);
+}
+
+// ---------------------------------------------------------------------------
 // OAuth2 for mentor login. Scope "identify" only: we need the user's ID.
 // ---------------------------------------------------------------------------
 

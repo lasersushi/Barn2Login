@@ -1,10 +1,13 @@
 import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
 import { issueRedeemCode, REDEEM_TTL_MIN } from "@/db/codes";
-import { upsertMember } from "@/db/members";
+import { hoursByMember, pacificToday } from "@/db/hours";
+import { findMemberByDiscordId, upsertMember } from "@/db/members";
 import { signOutAll } from "@/db/sessions";
 import { discordDisplayName } from "@/discord/api";
 import { belongsOnRoster, hasAdminRole } from "@/lib/auth";
+import { compProgress, compRange, compRequirement, daysBetween } from "@/lib/comp";
 import { requireEnv } from "@/lib/env";
+import { formatHours } from "@/lib/time";
 import type { Interaction, InteractionResponse } from "@/discord/types";
 
 // Stops Discord from fetching the link to build a preview. A crawler
@@ -20,6 +23,8 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
       return reply("Pong!");
     case "sign-in":
       return signIn(interaction);
+    case "hours":
+      return myHours(interaction);
     case "sign-out-all":
       return signOutEveryone(interaction);
     default:
@@ -52,6 +57,30 @@ async function signIn(interaction: Interaction): Promise<InteractionResponse> {
     `Tap to get your sign-in QR code (works once, expires in ${REDEEM_TTL_MIN} minutes):\n${link}`,
     SUPPRESS_EMBEDS,
   );
+}
+
+// A member's own hours, privately. Same numbers as /admin/hours, plus
+// progress toward the next competition when COMP_DATE is set.
+async function myHours(interaction: Interaction): Promise<InteractionResponse> {
+  const discordId = interaction.member?.user.id ?? interaction.user?.id;
+  const member = discordId ? await findMemberByDiscordId(discordId) : null;
+  if (!member) return reply("You don't have any hours yet. Use /sign-in at a meeting to start.");
+
+  const minutesFor = async (range: Parameters<typeof hoursByMember>[0]) =>
+    (await hoursByMember(range)).find((r) => r.id === member.id)?.minutes ?? 0;
+
+  const allTime = await minutesFor(null);
+  const lines = [`You have **${formatHours(allTime)}** hours all time.`];
+
+  const comp = compRequirement();
+  if (comp) {
+    const daysLeft = daysBetween(await pacificToday(), comp.date);
+    if (daysLeft >= 0) {
+      const counted = comp.countFrom ? await minutesFor(compRange(comp)) : allTime;
+      lines.push(compProgress(comp, counted, daysLeft));
+    }
+  }
+  return reply(lines.join("\n"));
 }
 
 // Leadership's end-of-day command. Anyone in the server can see it, but only
