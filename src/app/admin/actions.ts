@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
+import { removeHours } from "@/db/adjustments";
 import { issueBadge, revokeBadge } from "@/db/badges";
 import { createPeriod, deletePeriod } from "@/db/hours";
 import { findMemberByDiscordId } from "@/db/members";
@@ -76,6 +77,21 @@ export async function createPeriodAction(formData: FormData) {
   if (endsOn < startsOn) redirect("/admin/hours?error=period-end-before-start");
   const id = await createPeriod({ name, startsOn, endsOn, createdBy });
   redirect(`/admin/hours?period=${id}`);
+}
+
+// Hours are removed by inserting a negative adjustment (Design.md §4), never
+// by touching sessions. Hours are typed as a decimal, e.g. 1.5.
+export async function removeHoursAction(formData: FormData) {
+  const mentorId = await requireMentorMember("/admin/hours");
+  const memberId = text(formData, "memberId");
+  const reason = text(formData, "reason");
+  const minutes = Math.round(Number(text(formData, "hours")) * 60);
+  if (!memberId || !reason || !Number.isFinite(minutes) || minutes <= 0) {
+    redirect("/admin/hours?error=invalid-removal");
+  }
+  const result = await removeHours({ memberId, minutes, reason, mentorId });
+  if (!result.ok) redirect(`/admin/hours?error=${result.reason}`);
+  revalidatePath("/admin/hours");
 }
 
 export async function deletePeriodAction(formData: FormData) {

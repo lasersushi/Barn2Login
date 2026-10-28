@@ -259,6 +259,11 @@ Two forms, both inserts only, both with `created_by` set to the mentor's own
   overlaps an existing session for that member (an open session counts as
   running until now), since either would count time twice.
 
+**Removing hours** is on `/admin/hours`: a negative row in `adjustments`
+with the mentor in `created_by` and a required reason. Sessions are never
+touched. It is refused if it would take a member's all-time total below
+zero, and every adjustment is listed on that page.
+
 ### 5d. Badge — printed QR, for members without a phone
 
 A mentor makes a badge at `/admin/badges`: a printed card whose QR holds the

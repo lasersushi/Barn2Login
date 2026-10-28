@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { listAdjustments } from "@/db/adjustments";
 import { hoursByMember, listPeriods } from "@/db/hours";
 import { requireAdmin } from "@/lib/auth";
-import { formatCalendarDate, formatHours } from "@/lib/time";
-import { createPeriodAction, deletePeriodAction } from "../actions";
+import { formatCalendarDate, formatDate, formatHours } from "@/lib/time";
+import { createPeriodAction, deletePeriodAction, removeHoursAction } from "../actions";
 
 export const metadata: Metadata = { title: "Hours" };
 
@@ -12,6 +13,9 @@ const ERRORS: Record<string, string> = {
   "invalid-period": "A period needs a name, a start date, and an end date.",
   "period-end-before-start": "The period has to end on or after the day it starts.",
   "mentor-not-on-roster": "You're not on the roster yet. Open the roster page once to sync it with Discord, then try again.",
+  "invalid-removal": "Pick a member, a number of hours above zero, and a reason.",
+  not_found: "That member isn't on the roster.",
+  more_than_total: "That's more hours than they have in total.",
 };
 
 export default async function HoursPage({
@@ -26,7 +30,12 @@ export default async function HoursPage({
   // Chosen from the list rather than queried, so a stale or edited link
   // falls back to all time instead of erroring.
   const selected = periods.find((p) => p.id === period) ?? null;
-  const rows = await hoursByMember(selected && { startsOn: selected.starts_on, endsOn: selected.ends_on });
+  const [rows, adjustments] = await Promise.all([
+    hoursByMember(selected && { startsOn: selected.starts_on, endsOn: selected.ends_on }),
+    listAdjustments(),
+  ]);
+  // The removal picker shows all-time totals, since that's the most anyone can lose.
+  const allTime = selected ? await hoursByMember(null) : rows;
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
@@ -78,6 +87,74 @@ export default async function HoursPage({
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xl font-semibold">Remove hours</h2>
+        <p className="text-sm text-zinc-500">
+          Recorded under your name with the reason, and listed below. Sessions aren&apos;t changed: the hours come off
+          the total today, so they count against the period that includes today.
+        </p>
+        <form action={removeHoursAction} className="flex flex-wrap items-center gap-3">
+          <select name="memberId" required defaultValue="" className="rounded-md border border-zinc-300 px-2 py-1">
+            <option value="" disabled>
+              Member…
+            </option>
+            {allTime
+              .filter((m) => m.minutes > 0)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.first_name} {m.last_name} ({formatHours(m.minutes)} h)
+                </option>
+              ))}
+          </select>
+          <input
+            name="hours"
+            type="number"
+            min="0.25"
+            step="0.25"
+            required
+            placeholder="Hours"
+            className="w-24 rounded-md border border-zinc-300 px-2 py-1"
+          />
+          <input
+            name="reason"
+            required
+            placeholder="Reason, e.g. left early on Oct 20"
+            className="min-w-64 flex-1 rounded-md border border-zinc-300 px-2 py-1"
+          />
+          <button className="rounded-md bg-black px-3 py-1 text-white">Remove</button>
+        </form>
+
+        <h3 className="mt-2 font-semibold">Adjustments</h3>
+        {adjustments.length === 0 && <p className="text-zinc-500">No adjustments yet.</p>}
+        {adjustments.length > 0 && (
+          <table className="w-full text-left text-sm">
+            <thead className="text-zinc-500">
+              <tr>
+                <th className="py-2">When</th>
+                <th>Member</th>
+                <th className="text-right">Hours</th>
+                <th className="pl-4">Reason</th>
+                <th>By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adjustments.map((a) => (
+                <tr key={a.id} className="border-t border-zinc-200">
+                  <td className="py-2">{formatDate(a.created_at)}</td>
+                  <td>{a.member_name}</td>
+                  <td className="text-right font-medium">
+                    {a.delta_min < 0 ? "−" : "+"}
+                    {formatHours(Math.abs(a.delta_min))}
+                  </td>
+                  <td className="pl-4">{a.reason}</td>
+                  <td>{a.mentor_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className="flex flex-col gap-3">
