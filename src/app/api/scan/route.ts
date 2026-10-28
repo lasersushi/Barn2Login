@@ -1,10 +1,13 @@
-import { scanQr } from "@/db/sessions";
+import { BADGE_PREFIX } from "@/db/badges";
+import { scanBadge, scanQr } from "@/db/sessions";
 import { isKioskRequest } from "@/lib/auth";
 import { formatDuration, formatTime } from "@/lib/time";
 
 const MESSAGES = {
   invalid: "That code expired or was already used. Run /sign-in in Discord for a new one.",
+  invalid_badge: "This badge no longer works. Please see a mentor for a new one.",
   inactive: "This roster entry is inactive. Please see a mentor.",
+  repeat: "Got it already. Wait a minute before scanning your badge again.",
 };
 
 // The kiosk POSTs each scanned QR token here. Only a device holding the
@@ -19,7 +22,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "Missing token." }, { status: 400 });
   }
 
-  const result = await scanQr(body.token);
+  const result = body.token.startsWith(BADGE_PREFIX)
+    ? await scanBadge(body.token.slice(BADGE_PREFIX.length))
+    : await scanQr(body.token);
   if (!result.ok) {
     return Response.json({ ok: false, message: MESSAGES[result.reason] });
   }

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import QRCode from "qrcode";
+import { issueBadge, revokeBadge } from "@/db/badges";
 import { createPeriod, deletePeriod } from "@/db/hours";
 import { findMemberByDiscordId } from "@/db/members";
 import { overrideRecordSession, overrideSignIn, type OverrideResult } from "@/db/overrides";
@@ -80,6 +82,25 @@ export async function deletePeriodAction(formData: FormData) {
   await requireAdmin();
   await deletePeriod(text(formData, "periodId"));
   redirect("/admin/hours");
+}
+
+// Badges (Design.md §5d). The QR comes back to the page once, as action
+// state, and is never stored or put in a URL. Reprinting means a new badge.
+export type BadgeState = { badge?: { name: string; qrDataUrl: string }; error?: string };
+
+export async function makeBadgeAction(_prev: BadgeState, formData: FormData): Promise<BadgeState> {
+  await requireAdmin();
+  const issued = await issueBadge(text(formData, "memberId"));
+  if (!issued) return { error: "Pick an active member." };
+  const qrDataUrl = await QRCode.toDataURL(issued.qrText, { width: 600, margin: 2, errorCorrectionLevel: "M" });
+  revalidatePath("/admin/badges");
+  return { badge: { name: `${issued.firstName} ${issued.lastName}`.trim(), qrDataUrl } };
+}
+
+export async function revokeBadgeAction(formData: FormData) {
+  await requireAdmin();
+  await revokeBadge(text(formData, "memberId"));
+  revalidatePath("/admin/badges");
 }
 
 export async function logoutAction() {

@@ -185,7 +185,7 @@ create unique index one_open_session
 
 ## 5. Sign-in flows
 
-Three paths. Each proves something different.
+Four paths. Each proves something different.
 
 ### 5a. Primary — QR
 
@@ -259,6 +259,26 @@ Two forms, both inserts only, both with `created_by` set to the mentor's own
   overlaps an existing session for that member (an open session counts as
   running until now), since either would count time twice.
 
+### 5d. Badge — printed QR, for members without a phone
+
+A mentor makes a badge at `/admin/badges`: a printed card whose QR holds the
+member's long-lived token (`members.token_hash`, sha256 only). The QR is
+`b2badge:<token>`; the prefix tells `/api/scan` it isn't a one-time code.
+
+- The QR is shown once, when it's made. Reprinting means making a new badge,
+  which replaces the hash, so a lost badge stops working. Mentors can also
+  revoke one outright.
+- Scans write `source='qr'` like the primary path, with `ip_status` null
+  (no network was observed) and a `badge` flag on the check-in.
+- A badge scan is ignored for one minute after the member's last check-in or
+  check-out, so a card held in front of the camera doesn't sign in and
+  straight back out.
+
+**What this gives up:** anyone holding the card, or a photo of it, can scan
+it. No IP check happens at all. This is a deliberate trade for a handful of
+members; the `badge` flag puts every one of those sessions in front of a
+mentor. Don't hand badges to members who have phones.
+
 ## 6. IP classification
 
 The school's egress IP(s) define "on campus."
@@ -297,6 +317,7 @@ Explicitly bounded. This is a high school team.
 | Accomplice on campus relays a code | 10min/5min TTL, single use, photo shown at kiosk | Requires active collusion; lands flagged |
 | Sign in and leave immediately | Hours require a closed session; both taps needed | Mentor review |
 | Brute-forcing backup codes | Rate limit + single use + short TTL | Negligible |
+| Someone else scans a member's badge | Flagged for review; mentor revokes and reissues | Accepted — badges carry no location proof |
 
 **What is deliberately not defended against:** a member who understands Private
 Relay and uses it to bypass the location check. Detectable in the digest as an
@@ -359,7 +380,7 @@ closes it, so the "longer than 8 hours" flag (§9) is what catches it.
 
 ## 9. Flags and review
 
-Auto-flag a session when it is `source='backup'` or `source='admin'`,
+Auto-flag a session when it is `source='backup'` or `source='admin'`, a badge scan,
 `ip_status != 'verified'`, longer than 8 hours, or created
 within 60 seconds of another backup redemption. `/admin` sorts by flag count.
 

@@ -1,10 +1,17 @@
 import "server-only";
+import type postgres from "postgres";
 import { db } from "@/db/client";
 import { consumeCode } from "@/db/codes";
+import { sha256Hex } from "@/lib/crypto";
 
 // A check-in matches the meeting it falls in. Members who arrive up to an
 // hour early still count toward that meeting. Not in the spec; adjust here.
 const EARLY_ARRIVAL = "1 hour";
+
+const BADGE_FLAG = "badge";
+// Not in the spec. Long enough to step away from the camera, short enough
+// that nobody signs in and wants to leave within it.
+const BADGE_REPEAT_IGNORE = "1 minute";
 
 export type ScannedMember = {
   first_name: string;
@@ -21,7 +28,7 @@ export type ScanResult =
       checkInAt: Date;
       checkOutAt: Date;
     }
-  | { ok: false; reason: "invalid" | "inactive" };
+  | { ok: false; reason: "invalid" | "invalid_badge" | "inactive" | "repeat" };
 
 // The kiosk scanned a QR. Whether this is a check-in or a check-out depends
 // only on whether the member has an open session (Design.md §5a step 6).
@@ -30,56 +37,88 @@ export async function scanQr(token: string): Promise<ScanResult> {
   return db().begin(async (tx) => {
     const code = await consumeCode(tx, "qr", token);
     if (!code?.member_id) return { ok: false, reason: "invalid" } as const;
-
-    // Locking the member row serializes two scans for the same person, so
-    // they can't both see "no open session" and both check in.
-    const [member] = await tx<(ScannedMember & { active: boolean })[]>`
-      select first_name, last_name, photo_url, active
-      from members where id = ${code.member_id}
-      for update
-    `;
-    if (!member.active) return { ok: false, reason: "inactive" } as const;
-    const scanned = {
-      first_name: member.first_name,
-      last_name: member.last_name,
-      photo_url: member.photo_url,
-    };
-
-    // The only UPDATE sessions ever gets from a tap (CLAUDE.md invariant #2).
-    const [closed] = await tx<{ check_in_at: Date; check_out_at: Date }[]>`
-      update sessions
-      set check_out_at = now(), closed_by = 'tap'
-      where member_id = ${code.member_id} and check_out_at is null
-      returning check_in_at, check_out_at
-    `;
-    if (closed) {
-      return {
-        ok: true,
-        action: "check_out",
-        member: scanned,
-        checkInAt: closed.check_in_at,
-        checkOutAt: closed.check_out_at,
-      } as const;
-    }
-
-    const [opened] = await tx<{ check_in_at: Date }[]>`
-      insert into sessions (member_id, meeting_id, check_in_at, source, ip_status)
-      values (
-        ${code.member_id},
-        (
-          select id from meetings
-          where now() >= starts_at - ${EARLY_ARRIVAL}::interval and now() < ends_at
-          order by starts_at
-          limit 1
-        ),
-        now(),
-        'qr',
-        ${code.ip_status}
-      )
-      returning check_in_at
-    `;
-    return { ok: true, action: "check_in", member: scanned, checkInAt: opened.check_in_at } as const;
+    return toggleSession(tx, code.member_id, { ipStatus: code.ip_status, flags: [] });
   });
+}
+
+// The kiosk scanned a printed badge (Design.md §5d). Unlike a one-time QR,
+// the same badge keeps working, so a badge held in front of the camera
+// would sign in and straight back out. Ignore it for a minute after the
+// member's last scan. Every badge check-in is flagged for review: nothing
+// shows the person holding the card is its owner.
+export async function scanBadge(token: string): Promise<ScanResult> {
+  return db().begin(async (tx) => {
+    const [member] = await tx<{ id: string }[]>`
+      select id from members where token_hash = ${sha256Hex(token)}
+    `;
+    if (!member) return { ok: false, reason: "invalid_badge" } as const;
+    return toggleSession(tx, member.id, { ipStatus: null, flags: [BADGE_FLAG], ignoreRepeat: true });
+  });
+}
+
+async function toggleSession(
+  tx: postgres.TransactionSql,
+  memberId: string,
+  opts: { ipStatus: string | null; flags: string[]; ignoreRepeat?: boolean },
+): Promise<ScanResult> {
+  // Locking the member row serializes two scans for the same person, so
+  // they can't both see "no open session" and both check in.
+  const [member] = await tx<(ScannedMember & { active: boolean })[]>`
+    select first_name, last_name, photo_url, active
+    from members where id = ${memberId}
+    for update
+  `;
+  if (!member.active) return { ok: false, reason: "inactive" } as const;
+  const scanned = {
+    first_name: member.first_name,
+    last_name: member.last_name,
+    photo_url: member.photo_url,
+  };
+
+  if (opts.ignoreRepeat) {
+    const [recent] = await tx`
+      select 1 from sessions
+      where member_id = ${memberId}
+        and greatest(check_in_at, check_out_at) > now() - ${BADGE_REPEAT_IGNORE}::interval
+    `;
+    if (recent) return { ok: false, reason: "repeat" } as const;
+  }
+
+  // The only UPDATE sessions ever gets from a tap (CLAUDE.md invariant #2).
+  const [closed] = await tx<{ check_in_at: Date; check_out_at: Date }[]>`
+    update sessions
+    set check_out_at = now(), closed_by = 'tap'
+    where member_id = ${memberId} and check_out_at is null
+    returning check_in_at, check_out_at
+  `;
+  if (closed) {
+    return {
+      ok: true,
+      action: "check_out",
+      member: scanned,
+      checkInAt: closed.check_in_at,
+      checkOutAt: closed.check_out_at,
+    } as const;
+  }
+
+  const [opened] = await tx<{ check_in_at: Date }[]>`
+    insert into sessions (member_id, meeting_id, check_in_at, source, ip_status, flags)
+    values (
+      ${memberId},
+      (
+        select id from meetings
+        where now() >= starts_at - ${EARLY_ARRIVAL}::interval and now() < ends_at
+        order by starts_at
+        limit 1
+      ),
+      now(),
+      'qr',
+      ${opts.ipStatus},
+      ${opts.flags}
+    )
+    returning check_in_at
+  `;
+  return { ok: true, action: "check_in", member: scanned, checkInAt: opened.check_in_at } as const;
 }
 
 // ---------------------------------------------------------------------------

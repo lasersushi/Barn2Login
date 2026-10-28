@@ -55,6 +55,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link href="/admin/hours" className="text-sm underline">
             Hours
           </Link>
+          <Link href="/admin/badges" className="text-sm underline">
+            Badges
+          </Link>
           <form action={logoutAction}>
             <button className="text-sm text-zinc-500 underline">Log out</button>
           </form>
