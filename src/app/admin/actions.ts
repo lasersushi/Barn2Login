@@ -41,9 +41,9 @@ async function requireMentorMember(page = "/admin"): Promise<string> {
   return mentor.id;
 }
 
-function finishOverride(result: OverrideResult) {
-  if (!result.ok) redirect(`/admin?error=${result.reason}`);
-  revalidatePath("/admin");
+function finishOverride(result: OverrideResult, page = "/admin") {
+  if (!result.ok) redirect(`${page}?error=${result.reason}`);
+  revalidatePath(page);
 }
 
 export async function overrideSignInAction(formData: FormData) {
@@ -53,16 +53,17 @@ export async function overrideSignInAction(formData: FormData) {
 }
 
 export async function overrideRecordSessionAction(formData: FormData) {
-  const mentorId = await requireMentorMember();
+  const mentorId = await requireMentorMember("/admin/hours");
   const memberId = text(formData, "memberId");
   const date = text(formData, "date");
   const start = text(formData, "start");
   const end = text(formData, "end");
   if (!memberId || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
-    redirect("/admin?error=invalid-session");
+    redirect("/admin/hours?error=invalid-session");
   }
   finishOverride(
     await overrideRecordSession({ memberId, mentorId, date, start, end, note: text(formData, "note") || null }),
+    "/admin/hours",
   );
 }
 

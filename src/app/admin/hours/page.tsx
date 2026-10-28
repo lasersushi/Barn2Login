@@ -5,7 +5,12 @@ import { listAdjustments } from "@/db/adjustments";
 import { hoursByMember, listPeriods } from "@/db/hours";
 import { requireAdmin } from "@/lib/auth";
 import { formatCalendarDate, formatDate, formatHours } from "@/lib/time";
-import { createPeriodAction, deletePeriodAction, removeHoursAction } from "../actions";
+import {
+  createPeriodAction,
+  deletePeriodAction,
+  overrideRecordSessionAction,
+  removeHoursAction,
+} from "../actions";
 
 export const metadata: Metadata = { title: "Hours" };
 
@@ -15,6 +20,11 @@ const ERRORS: Record<string, string> = {
   "mentor-not-on-roster": "You're not on the roster yet. Open the roster page once to sync it with Discord, then try again.",
   "invalid-removal": "Pick a member, a number of hours above zero, and a reason.",
   not_found: "That member isn't on the roster.",
+  inactive: "They're inactive because they don't have the member role in Discord.",
+  "invalid-session": "Pick a member, a date, a start time, and an end time.",
+  end_before_start: "The session has to end after it starts.",
+  in_future: "That session hasn't ended yet. Use Sign in now on the roster instead.",
+  overlap: "That overlaps a session they already have, which would count the time twice.",
   more_than_total: "That's more hours than they have in total.",
 };
 
@@ -36,6 +46,10 @@ export default async function HoursPage({
   ]);
   // The removal picker shows all-time totals, since that's the most anyone can lose.
   const allTime = selected ? await hoursByMember(null) : rows;
+  // The member pickers below are easier to use in name order.
+  const byName = allTime.toSorted(
+    (a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name),
+  );
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
@@ -90,6 +104,34 @@ export default async function HoursPage({
       </section>
 
       <section className="flex flex-col gap-3">
+        <h2 className="text-xl font-semibold">Record a past session</h2>
+        <p className="text-sm text-zinc-500">
+          For when someone was there but couldn&apos;t scan (kiosk or Wi-Fi down). Times are Pacific. It&apos;s
+          recorded under your name and flagged for review.
+        </p>
+        <form action={overrideRecordSessionAction} className="flex flex-wrap items-center gap-3">
+          <select name="memberId" required defaultValue="" className="rounded-md border border-zinc-300 px-2 py-1">
+            <option value="" disabled>
+              Member…
+            </option>
+            {byName
+              .filter((m) => m.active)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.first_name} {m.last_name}
+                </option>
+              ))}
+          </select>
+          <input name="date" type="date" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <input name="start" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <span>to</span>
+          <input name="end" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
+          <input name="note" placeholder="Why (optional)" className="rounded-md border border-zinc-300 px-2 py-1" />
+          <button className="rounded-md bg-black px-3 py-1 text-white">Record</button>
+        </form>
+      </section>
+
+      <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Remove hours</h2>
         <p className="text-sm text-zinc-500">
           Recorded under your name with the reason, and listed below. Sessions aren&apos;t changed: the hours come off
@@ -100,7 +142,7 @@ export default async function HoursPage({
             <option value="" disabled>
               Member…
             </option>
-            {allTime
+            {byName
               .filter((m) => m.minutes > 0)
               .map((m) => (
                 <option key={m.id} value={m.id}>

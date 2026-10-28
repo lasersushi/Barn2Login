@@ -7,7 +7,6 @@ import { belongsOnRoster, requireAdmin } from "@/lib/auth";
 import { formatDate, formatTime } from "@/lib/time";
 import {
   logoutAction,
-  overrideRecordSessionAction,
   overrideSignInAction,
   signOutAllAction,
   signOutMemberAction,
@@ -19,10 +18,6 @@ const ERRORS: Record<string, string> = {
   "mentor-not-on-roster": "You're not on the roster yet. Reload this page to sync it with Discord, then try again.",
   inactive: "They're inactive because they don't have the member role in Discord.",
   already_signed_in: "They're already signed in.",
-  "invalid-session": "Pick a member, a date, a start time, and an end time.",
-  end_before_start: "The session has to end after it starts.",
-  in_future: "That session hasn't ended yet. Use Sign in instead.",
-  overlap: "That overlaps a session they already have, which would count the time twice.",
 };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -45,7 +40,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const [members, open] = await Promise.all([listMembers(), listOpenSessions()]);
   const guildById = new Map(guild.map((g) => [g.id, g]));
   const signedIn = new Set(open.map((s) => s.member_id));
-  const active = members.filter((m) => m.active);
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
@@ -132,32 +126,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             ))}
           </tbody>
         </table>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold">Record a past session</h2>
-        <p className="text-sm text-zinc-500">
-          For when someone was there but couldn&apos;t scan (kiosk or Wi-Fi down). Times are Pacific. It&apos;s
-          recorded under your name and flagged for review.
-        </p>
-        <form action={overrideRecordSessionAction} className="flex flex-wrap items-center gap-3">
-          <select name="memberId" required defaultValue="" className="rounded-md border border-zinc-300 px-2 py-1">
-            <option value="" disabled>
-              Member…
-            </option>
-            {active.map((m) => (
-              <option key={m.id} value={m.id}>
-                {fullName(m)}
-              </option>
-            ))}
-          </select>
-          <input name="date" type="date" required className="rounded-md border border-zinc-300 px-2 py-1" />
-          <input name="start" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
-          <span>to</span>
-          <input name="end" type="time" required className="rounded-md border border-zinc-300 px-2 py-1" />
-          <input name="note" placeholder="Why (optional)" className="rounded-md border border-zinc-300 px-2 py-1" />
-          <button className="rounded-md bg-black px-3 py-1 text-white">Record</button>
-        </form>
       </section>
     </main>
   );
