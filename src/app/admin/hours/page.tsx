@@ -55,9 +55,15 @@ export default async function HoursPage({
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Hours</h1>
-        <Link href="/admin" className="text-sm text-zinc-500 underline">
-          Back to roster
-        </Link>
+        <div className="flex gap-4">
+          {/* A plain <a>: it's a file download, not a page to navigate to. */}
+          <a href="/admin/hours/export" download className="text-sm text-zinc-500 underline">
+            Export .xlsx
+          </a>
+          <Link href="/admin" className="text-sm text-zinc-500 underline">
+            Back to roster
+          </Link>
+        </div>
       </header>
 
       {error && ERRORS[error] && <p className="rounded-md bg-red-100 p-3 text-red-800">{ERRORS[error]}</p>}

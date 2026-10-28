@@ -79,3 +79,39 @@ export async function hoursByMember(range: { startsOn: string; endsOn: string } 
     order by m.active desc, minutes desc, m.last_name, m.first_name
   `;
 }
+
+export type HoursSummary = {
+  periods: Period[];
+  rows: { member: MemberHours; periodMinutes: number[] }[];
+};
+
+// Everyone's all-time minutes plus their minutes in each period, in the order
+// of periods. The nightly hours.csv and the .xlsx export are both built from this.
+export async function hoursSummary(): Promise<HoursSummary> {
+  const periods = await listPeriods();
+  const allTime = await hoursByMember(null);
+  const byPeriod = await Promise.all(
+    periods.map(async (p) => {
+      const rows = await hoursByMember({ startsOn: p.starts_on, endsOn: p.ends_on });
+      return new Map(rows.map((r) => [r.id, r.minutes]));
+    }),
+  );
+  return {
+    periods,
+    rows: allTime.map((member) => ({ member, periodMinutes: byPeriod.map((m) => m.get(member.id) ?? 0) })),
+  };
+}
+
+// Today's date in Pacific time, YYYY-MM-DD. Postgres does the zone math.
+export async function pacificToday(): Promise<string> {
+  const [{ day }] = await db()<{ day: string }[]>`
+    select to_char(now() at time zone 'America/Los_Angeles', 'YYYY-MM-DD') as day
+  `;
+  return day;
+}
+
+// Column header for a period in exported files. Includes the dates, since
+// a name alone ("Build season") is ambiguous once the file leaves the site.
+export function periodColumn(p: Period): string {
+  return `${p.name}, ${p.starts_on} to ${p.ends_on} (hours)`;
+}

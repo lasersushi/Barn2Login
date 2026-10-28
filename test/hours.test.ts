@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createPeriod, deletePeriod, hoursByMember, listPeriods } from "@/db/hours";
+import ExcelJS from "exceljs";
+import { createPeriod, deletePeriod, hoursByMember, hoursSummary, listPeriods } from "@/db/hours";
+import { hoursWorkbook } from "@/lib/xlsx";
 import { formatCalendarDate, formatHours } from "@/lib/time";
 import { sql } from "./db-client";
 
@@ -122,5 +124,37 @@ describe("formatHours", () => {
     expect(formatHours(0)).toBe("0.0");
     expect(formatHours(220)).toBe("3.7");
     expect(formatHours(-30)).toBe("-0.5");
+  });
+});
+
+describe("hoursWorkbook", () => {
+  it("has the hours.csv columns, with hours as numbers", async () => {
+    const ada = await addMember("Ada");
+    await addSession(ada, "2026-10-01 16:00-07", "2026-10-01 19:40-07");
+    await addSession(ada, "2026-11-05 16:00-08", "2026-11-05 17:00-08");
+    await createPeriod({ name: "October", startsOn: "2026-10-01", endsOn: "2026-10-31", createdBy: ada });
+
+    const workbook = new ExcelJS.Workbook();
+    // exceljs types its own global Buffer that Node's doesn't match; at
+    // runtime load() takes a Node Buffer fine.
+    const file = await hoursWorkbook(await hoursSummary());
+    await workbook.xlsx.load(file as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    const sheet = workbook.getWorksheet("Hours")!;
+
+    expect(sheet.getRow(1).values).toEqual([
+      undefined, // exceljs rows are 1-indexed
+      "First name",
+      "Last name",
+      "Status",
+      "All time (hours)",
+      "October, 2026-10-01 to 2026-10-31 (hours)",
+    ]);
+    const row = sheet.getRow(2);
+    expect(row.getCell(1).value).toBe("Ada");
+    expect(row.getCell(3).value).toBe("Active");
+    expect(row.getCell(4).value).toBeCloseTo(280 / 60);
+    expect(row.getCell(5).value).toBeCloseTo(220 / 60);
+    expect(row.getCell(5).numFmt).toBe("0.0");
+    expect(sheet.rowCount).toBe(2);
   });
 });

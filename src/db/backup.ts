@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db/client";
-import { hoursByMember, listPeriods } from "@/db/hours";
+import { hoursSummary, pacificToday, periodColumn } from "@/db/hours";
 import { requireEnv } from "@/lib/env";
 import { toCsv } from "@/lib/csv";
 import { formatHours } from "@/lib/time";
@@ -41,11 +41,9 @@ export async function exportBackups(): Promise<{ storage: string[]; drive: strin
 }
 
 async function buildBackup(): Promise<Backup> {
-  const [{ day }] = await db()<{ day: string }[]>`
-    select to_char(now() at time zone 'America/Los_Angeles', 'YYYY-MM-DD') as day
-  `;
+  const day = await pacificToday();
   const tables: Record<string, Record<string, unknown>[]> = {
-    "hours.csv": await hoursSummary(),
+    "hours.csv": await hoursCsvRows(),
     // Everything except token_hash: credentials don't belong in a backup.
     "members.csv": await db()`
       select id, first_name, last_name, grad_year, subteam, discord_id, photo_url, active, created_at
@@ -61,26 +59,14 @@ async function buildBackup(): Promise<Backup> {
 
 // One row per person, one column per period, in hours. Same numbers as
 // /admin/hours. Headers are written for a person opening it in Sheets.
-async function hoursSummary(): Promise<Record<string, unknown>[]> {
-  const periods = await listPeriods();
-  const allTime = await hoursByMember(null);
-  const byPeriod = await Promise.all(
-    periods.map(async (p) => {
-      const rows = await hoursByMember({ startsOn: p.starts_on, endsOn: p.ends_on });
-      return new Map(rows.map((r) => [r.id, r.minutes]));
-    }),
-  );
-  return allTime.map((m) => ({
+async function hoursCsvRows(): Promise<Record<string, unknown>[]> {
+  const { periods, rows } = await hoursSummary();
+  return rows.map(({ member: m, periodMinutes }) => ({
     "First name": m.first_name,
     "Last name": m.last_name,
     Status: m.active ? "Active" : "Inactive",
     "All time (hours)": formatHours(m.minutes),
-    ...Object.fromEntries(
-      periods.map((p, i) => [
-        `${p.name}, ${p.starts_on} to ${p.ends_on} (hours)`,
-        formatHours(byPeriod[i].get(m.id) ?? 0),
-      ]),
-    ),
+    ...Object.fromEntries(periods.map((p, i) => [periodColumn(p), formatHours(periodMinutes[i])])),
   }));
 }
 
