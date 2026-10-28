@@ -129,6 +129,7 @@ export type Database = {
           id: string
           last_name: string
           photo_url: string | null
+          qr_token_hash: string | null
           subteam: string | null
           token_hash: string | null
         }
@@ -141,6 +142,7 @@ export type Database = {
           id?: string
           last_name: string
           photo_url?: string | null
+          qr_token_hash?: string | null
           subteam?: string | null
           token_hash?: string | null
         }
@@ -153,6 +155,7 @@ export type Database = {
           id?: string
           last_name?: string
           photo_url?: string | null
+          qr_token_hash?: string | null
           subteam?: string | null
           token_hash?: string | null
         }
