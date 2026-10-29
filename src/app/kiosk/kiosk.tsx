@@ -188,9 +188,16 @@ function ResultCard({ result }: { result: ScanResponse }) {
 }
 
 // Downloaded voices (Settings → Accessibility → Spoken Content → Voices)
-// sound far less robotic than the default. Null means the default voice.
+// sound far less robotic than the default. Ava (Premium) first, as the
+// clearest over shop noise; then any other downloaded voice. Null means
+// the default voice.
 function bestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  return voices.find((v) => v.lang === "en-US" && /premium|enhanced/i.test(v.name)) ?? null;
+  const english = voices.filter((v) => v.lang === "en-US");
+  return (
+    english.find((v) => /^Ava\b/.test(v.name) && /premium/i.test(v.name)) ??
+    english.find((v) => /premium|enhanced/i.test(v.name)) ??
+    null
+  );
 }
 
 // Never lets speech break scanning: a browser without it just stays quiet.
