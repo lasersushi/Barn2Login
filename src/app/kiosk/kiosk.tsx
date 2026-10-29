@@ -4,14 +4,7 @@ import type QrScanner from "qr-scanner";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type ScanResponse =
-  | {
-      ok: true;
-      action: "check_in" | "check_out";
-      name: string;
-      firstName: string;
-      photoUrl: string | null;
-      detail: string;
-    }
+  | { ok: true; action: "check_in" | "check_out"; name: string; photoUrl: string | null; detail: string }
   | { ok: false; message: string };
 
 const RESULT_SHOWN_MS = 4000;
@@ -24,7 +17,6 @@ export function Kiosk() {
   const armedRef = useRef(false);
   const busyRef = useRef(false);
   const lastRef = useRef<{ token: string; at: number } | null>(null);
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
 
   const [armed, setArmed] = useState(false);
   const [result, setResult] = useState<ScanResponse | null>(null);
@@ -44,14 +36,7 @@ export function Kiosk() {
         body: JSON.stringify({ token: data }),
       });
       const body = await res.json();
-      const scanned: ScanResponse = res.ok ? body : { ok: false, message: body.error ?? "Something went wrong." };
-      setResult(scanned);
-      // Saying the name out loud is the check that the person scanning is
-      // the person signing in: everyone in the shop hears it.
-      if (scanned.ok) {
-        const greeting = scanned.action === "check_in" ? "Welcome" : "Bye";
-        speak(`${greeting}, ${scanned.firstName}`, voiceRef.current);
-      }
+      setResult(res.ok ? body : { ok: false, message: body.error ?? "Something went wrong." });
     } catch {
       setResult({ ok: false, message: "Couldn't reach the server. Check the iPad's Wi-Fi." });
     }
@@ -63,10 +48,7 @@ export function Kiosk() {
   }, []);
 
   // Safari only grants the camera from a user gesture, hence the Start button.
-  // Speech needs one too, and only counts it before the first await. Saying
-  // something here unlocks it, and checks the volume is up.
   const start = useCallback(async () => {
-    speak("Sign-in ready", voiceRef.current);
     if (!videoRef.current) return;
     // Loaded on demand: the library touches browser-only APIs, and client
     // components are still rendered once on the server.
@@ -86,17 +68,6 @@ export function Kiosk() {
       setCameraError("Couldn't start the camera. Check Safari's camera permission for this site.");
     }
   }, [onDecode]);
-
-  // Voices load asynchronously; getVoices() is often empty until this fires.
-  useEffect(() => {
-    if (typeof speechSynthesis === "undefined") return;
-    function pick() {
-      voiceRef.current = bestVoice(speechSynthesis.getVoices());
-    }
-    pick();
-    speechSynthesis.addEventListener("voiceschanged", pick);
-    return () => speechSynthesis.removeEventListener("voiceschanged", pick);
-  }, []);
 
   // The camera stream dies when the tab is backgrounded. Stop cleanly and
   // re-arm on return; if Safari refuses without a gesture, show Start again.
@@ -145,9 +116,7 @@ export function Kiosk() {
       )}
 
       {armed && !result && (
-        <p className="text-2xl text-zinc-300">
-          Hold your QR code up to the camera. No code yet? Run /my-qr in Discord.
-        </p>
+        <p className="text-2xl text-zinc-300">Run /sign-in in Discord, then hold your QR code up to the camera.</p>
       )}
 
       {result && <ResultCard result={result} />}
@@ -185,23 +154,6 @@ function ResultCard({ result }: { result: ScanResponse }) {
       <p className="text-2xl text-white/80">{result.detail}</p>
     </div>
   );
-}
-
-// Downloaded voices (Settings → Accessibility → Spoken Content → Voices)
-// sound far less robotic than the default. Null means the default voice.
-function bestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  return voices.find((v) => v.lang === "en-US" && /premium|enhanced/i.test(v.name)) ?? null;
-}
-
-// Never lets speech break scanning: a browser without it just stays quiet.
-function speak(text: string, voice: SpeechSynthesisVoice | null) {
-  if (typeof speechSynthesis === "undefined") return;
-  // Two quick scans shouldn't queue up and fall behind.
-  speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
-  if (voice) utterance.voice = voice;
-  speechSynthesis.speak(utterance);
 }
 
 function initials(name: string): string {

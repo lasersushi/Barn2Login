@@ -18,8 +18,8 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
   switch (interaction.data?.name) {
     case "ping":
       return reply("Pong!");
-    case "my-qr":
-      return myQr(interaction);
+    case "sign-in":
+      return signIn(interaction);
     case "sign-out-all":
       return signOutEveryone(interaction);
     default:
@@ -27,15 +27,16 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
   }
 }
 
-// Design.md §5a: reply privately with a one-time link to the member's
-// permanent QR. The link keeps the long-lived token out of Discord.
+// Design.md §5a steps 1–2: reply privately with a one-time link. Tapping it
+// is the only moment we see the member's real IP; Discord's servers are the
+// ones calling this route.
 //
 // Having the member role is what puts someone on the roster, so their first
-// /my-qr creates their row; nobody has to add them first.
-async function myQr(interaction: Interaction): Promise<InteractionResponse> {
+// /sign-in creates their row; nobody has to add them first.
+async function signIn(interaction: Interaction): Promise<InteractionResponse> {
   // In a DM there's no member, so no roles to check.
   const discord = interaction.member;
-  if (!discord) return reply("Run /my-qr in the Barn 2 server.");
+  if (!discord) return reply("Run /sign-in in the Barn 2 server.");
   if (!belongsOnRoster(discord.roles)) {
     return reply("You need the member role in the Barn 2 server to sign in. Ask leadership if that's a mistake.");
   }
@@ -48,8 +49,7 @@ async function myQr(interaction: Interaction): Promise<InteractionResponse> {
   const { token } = await issueRedeemCode(member.id);
   const link = `${requireEnv("APP_BASE_URL")}/redeem/${token}`;
   return reply(
-    `Tap to get your permanent sign-in QR code. Save it to Photos and scan it every time you arrive and leave. ` +
-      `(Link works once, expires in ${REDEEM_TTL_MIN} minutes. Getting a new code turns your old one off.)\n${link}`,
+    `Tap to get your sign-in QR code (works once, expires in ${REDEEM_TTL_MIN} minutes):\n${link}`,
     SUPPRESS_EMBEDS,
   );
 }

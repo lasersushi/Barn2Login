@@ -46,7 +46,7 @@ Vercel (Next.js, TypeScript)
 ├── /api/auth/discord/*       mentor OAuth login + callback
 ├── /api/discord/interactions Discord slash commands (HTTP interactions)
 ├── /redeem/[token]           page the one-time link opens; its JS POSTs below
-├── /api/redeem/[token]       issues the phone QR (POST only, so link
+├── /api/redeem/[token]       captures member IP, issues QR (POST only, so link
 │                             previewers can't burn the one-time link)
 ├── /api/scan                 kiosk POSTs scanned token, gets verdict + identity
 │                             (rejected without the kiosk cookie)
@@ -79,8 +79,7 @@ create table members (
   subteam         text,
   discord_id      text unique,              -- null until linked
   photo_url       text,                     -- Supabase Storage
-  token_hash      text unique,              -- sha256 of printed badge token (§5d)
-  qr_token_hash   text unique,              -- sha256 of phone QR token (§5a)
+  token_hash      text unique,              -- sha256 of long-lived member token
   active          boolean not null default true,
   created_at      timestamptz not null default now()
 );
@@ -101,7 +100,7 @@ create table sessions (
   check_out_at  timestamptz,                -- null = open
   source        text not null,              -- qr | backup | admin
   closed_by     text,                       -- tap | auto | admin
-  ip_status     text,                       -- unused since §6 was dropped
+  ip_status     text,                       -- verified | off_network | unverifiable
   flags         text[] not null default '{}',
   created_by    uuid references members(id),-- set only for admin overrides
   note          text
@@ -124,8 +123,8 @@ create table pending_codes (
   code_hash   text not null,
   expires_at  timestamptz not null,
   used_at     timestamptz,
-  ip_status   text,                         -- unused since §6 was dropped
-  ip_address  inet,                         -- unused since §6 was dropped
+  ip_status   text,                         -- recorded at issue time (qr only)
+  ip_address  inet,                         -- raw IP at issue time (qr only), see §6
   created_at  timestamptz not null default now(),
   check (kind = 'backup' or member_id is not null)
 );
@@ -188,39 +187,29 @@ create unique index one_open_session
 
 Four paths. Each proves something different.
 
-### 5a. Primary — permanent phone QR
+### 5a. Primary — QR
 
-1. Member runs `/my-qr` in Discord. Once, not every meeting.
-2. Bot replies **ephemerally** with a one-time link (10 minutes, single use).
-3. Member taps the link. `/api/redeem/[token]` makes a new long-lived token,
-   stores its sha256 in `members.qr_token_hash`, and shows the QR
-   (`b2qr:<token>`). The member saves it to Photos.
-4. Every time they arrive or leave, the member scans the saved QR at the iPad.
-5. Kiosk POSTs it to `/api/scan`. Server determines whether this is a
-   check-in or check-out from the member's open-session state, writes the
-   row, returns the member's name and photo.
-6. Kiosk displays name + photo full-size, and on check-out, session duration.
-   It also **says the name out loud**: "Welcome, Ada" / "Bye, Ada".
+1. Member runs `/sign-in` in Discord.
+2. Bot replies **ephemerally** with a one-time link.
+3. Member taps the link. `/api/redeem/[token]` sees their real IP.
+4. Server classifies the IP (§6) and issues a QR image containing a fresh
+   token. **TTL: 10 minutes. Single use.**
+5. Member walks to the iPad and scans.
+6. Kiosk POSTs the token to `/api/scan`. Server validates, determines whether
+   this is a check-in or check-out from the member's open-session state,
+   writes the row, returns the member's name and photo.
+7. Kiosk displays name + photo full-size, and on check-out, session duration.
 
-- Running `/my-qr` again replaces the hash, so the old QR stops working. That
-  is how a lost or leaked QR gets turned off. The token can't be shown again
-  later; only its hash is kept.
-- A scan is ignored for one minute after the member's last check-in or
-  check-out, so a phone held in front of the camera doesn't sign in and
-  straight back out.
-- Scans write `source='qr'`, `ip_status` null, no flags.
+**Why the redirect step is mandatory:** Discord's servers POST the slash
+command to us, so `/api/discord/interactions` sees *Discord's* IP, not the
+member's. The tapped link is the only point where we observe the member's
+actual network. A one-step slash command would look like it works and measure
+nothing.
 
-**Why the redeem link is still there:** it keeps the long-lived token out of
-Discord's message history.
-
-**What the readout replaced (October 2026):** this used to be a one-time QR,
-valid 10 minutes, issued only after an IP check at the tapped link (§6). That
-stopped a member at home from forwarding a code to a friend in the shop, at
-the cost of running `/sign-in` twice every meeting. The team decided the
-friction wasn't worth it. The defense is now social: the iPad is in the middle
-of the shop, and if it says the name of someone who isn't there, people
-notice. Anyone holding a copy of the QR can scan it; the readout and the
-nightly digest are what catch that.
+**Why the QR path needs no location check at redemption:** the member is
+physically standing at the iPad. That is stronger evidence than any IP or GPS
+reading. The location check happens at *issue* time, which is what prevents a
+member at home from getting a code to forward to a friend.
 
 ### 5b. Backup — code displayed on iPad
 
@@ -278,31 +267,48 @@ zero, and every adjustment is listed on that page.
 ### 5d. Badge — printed QR, for members without a phone
 
 A mentor makes a badge at `/admin/badges`: a printed card whose QR holds the
-member's long-lived badge token (`members.token_hash`, sha256 only). The QR is
-`b2badge:<token>`; the prefix tells `/api/scan` it's a badge, not a phone QR.
+member's long-lived token (`members.token_hash`, sha256 only). The QR is
+`b2badge:<token>`; the prefix tells `/api/scan` it isn't a one-time code.
 
 - The QR is shown once, when it's made. Reprinting means making a new badge,
   which replaces the hash, so a lost badge stops working. Mentors can also
   revoke one outright.
-- The badge and the phone QR (§5a) have separate columns, so making one never
-  turns off the other.
-- Scans behave exactly like a phone QR: `source='qr'`, `ip_status` null, no
-  flag, the same one-minute repeat window, and the name said out loud.
+- Scans write `source='qr'` like the primary path, with `ip_status` null
+  (no network was observed) and a `badge` flag on the check-in.
+- A badge scan is ignored for one minute after the member's last check-in or
+  check-out, so a card held in front of the camera doesn't sign in and
+  straight back out.
 
 **What this gives up:** anyone holding the card, or a photo of it, can scan
-it. That's the same trade as the phone QR, and the readout covers it the same
-way. Members with phones should use `/my-qr` instead.
+it. No IP check happens at all. This is a deliberate trade for a handful of
+members; the `badge` flag puts every one of those sessions in front of a
+mentor. Don't hand badges to members who have phones.
 
-## 6. IP classification (dropped)
+## 6. IP classification
 
-The plan was to classify the IP seen when a member tapped the redeem link
-(`verified` / `off_network` / `unverifiable` for iCloud Private Relay), and
-refuse to issue a one-time QR off campus. It was never enforced, and was
-dropped in October 2026 along with the one-time QR (§5a). Nothing reads,
-records, or blocks on IP addresses.
+The school's egress IP(s) define "on campus."
 
-`sessions.ip_status`, `pending_codes.ip_status` and `pending_codes.ip_address`
-remain in the schema, unused.
+**Do not hardcode an allowlist on day one.** Log `x-forwarded-for` on every
+redeem for the first two weeks with enforcement off, then build the allowlist
+from observed data. Schools often NAT through several addresses and rotate.
+
+Three outcomes, never two:
+
+| Status | Meaning | Action |
+|---|---|---|
+| `verified` | IP matches the school allowlist | Issue code normally |
+| `off_network` | IP is a known-good public address elsewhere | Do not issue; tell the member why |
+| `unverifiable` | IP is in Apple's iCloud Private Relay egress ranges | Issue code, tag session `unverifiable` |
+
+Private Relay covers all Safari connections including `SFSafariViewController`,
+which is how Discord opens links on iOS. Members with iCloud+ will hit this
+without knowing what it is. Treating them as off-network would wrongly lock out
+a chunk of the team; treating them as verified would ship a bypass that people
+get *by default* from their couch. Tag and move on — the mentor digest stays
+honest and nobody is stuck.
+
+Fetch Apple's published relay egress ranges (the `mask.icloud.com` IP list) on
+a schedule and cache it.
 
 ## 7. Threat model
 
@@ -310,16 +316,17 @@ Explicitly bounded. This is a high school team.
 
 | Attack | Defeated by | Residual |
 |---|---|---|
-| Sign in from home | Every QR has to be scanned at the iPad, which is in the shop | None |
-| Sign in from elsewhere on campus | Same; backup codes originate on the kiosk screen | None |
-| Friend scans for an absent member (shared QR or borrowed badge) | Kiosk says the name out loud in the middle of the shop; nightly digest | Accepted — needs a friend willing to do it in front of the team |
+| Sign in from home | IP check at code issue | None meaningful |
+| Sign in from elsewhere on campus | Backup code originates on the kiosk screen; QR requires walking to the iPad | None for QR path |
+| Friend signs in for absent member | Absent member's IP fails, so no code is issued | None |
+| Accomplice on campus relays a code | 10min/5min TTL, single use, photo shown at kiosk | Requires active collusion; lands flagged |
 | Sign in and leave immediately | Hours require a closed session; both taps needed | Mentor review |
 | Brute-forcing backup codes | Rate limit + single use + short TTL | Negligible |
-| Leaked QR or lost badge | Member runs `/my-qr` again; mentor revokes or reissues the badge | Works until replaced |
+| Someone else scans a member's badge | Flagged for review; mentor revokes and reissues | Accepted — badges carry no location proof |
 
-**What is deliberately not defended against:** a member who hands their QR to
-a friend, and a friend who scans it without anyone noticing the name. The team
-judged this not worth engineering against (October 2026).
+**What is deliberately not defended against:** a member who understands Private
+Relay and uses it to bypass the location check. Detectable in the digest as an
+unusual `unverifiable` rate. Not worth engineering against.
 
 **The real defense is the nightly digest.** Mentors were in the room. A human
 who was present outperforms any automated check, and every mechanism above
@@ -346,7 +353,7 @@ The job does three things:
 
    Files: `hours.csv` (one row per person: name, status, all-time hours, one
    column per period; the same numbers as `/admin/hours`), plus the source
-   records a restore would load: `members` (minus both token hashes), `sessions`,
+   records a restore would load: `members` (minus `token_hash`), `sessions`,
    `adjustments` and `periods`. The Drive folder also keeps
    `Hours (latest).csv` at its top level, replaced nightly. Each destination
    is attempted even if the other fails; any failure makes the cron a 500.
@@ -378,8 +385,8 @@ closes it, so the "longer than 8 hours" flag (§9) is what catches it.
 
 ## 9. Flags and review
 
-Auto-flag a session when it is `source='backup'` or `source='admin'`, longer
-than 8 hours, or created
+Auto-flag a session when it is `source='backup'` or `source='admin'`, a badge scan,
+`ip_status != 'verified'`, longer than 8 hours, or created
 within 60 seconds of another backup redemption. `/admin` sorts by flag count.
 
 Target: a mentor reviews a handful of sessions a week, not the whole roster.
@@ -392,15 +399,7 @@ it before anyone complains.
 ## 10. Kiosk operation
 
 - iPad in Safari, page pinned. Settings → Display → Auto-Lock → Never.
-- Guided Access on, with a passcode only mentors know. In its Options, turn
-  **Volume Buttons** off. Guided Access also blocks Control Center, so nobody
-  can mute it. Turn the volume all the way up *before* starting it. Keep it
-  plugged in.
-- Speech (`speechSynthesis`) also needs a user gesture, and only counts one
-  before the first `await`, so Start says "Sign-in ready" first thing. That
-  doubles as a volume check. Download an Enhanced or Premium English voice
-  (Settings → Accessibility → Spoken Content → Voices); the kiosk picks one
-  if Safari exposes it, else the default.
+- Guided Access on. Keep it plugged in.
 - `getUserMedia` requires a user gesture, so the page needs a "Start" button
   after load. The camera dies when the tab backgrounds — handle
   `visibilitychange` and re-arm.
@@ -422,7 +421,7 @@ linked Discord accounts by hand, which kept two lists that drifted apart.
   should be on the roster and deactivates everyone else (lost the role, left
   the server). Deactivating is a soft delete; hours stay. A sync that finds
   nobody with the role is refused instead of deactivating the whole team.
-- **`/my-qr`** checks the role from the interaction payload and creates or
+- **`/sign-in`** checks the role from the interaction payload and creates or
   reactivates the caller's row on the spot, so a new member can sign in
   before anyone opens `/admin`.
 - **Names** come from the server nickname (else Discord display name, else
@@ -442,18 +441,20 @@ Ship each step before starting the next.
 2. `/api/discord/interactions` with signature verification and a `/ping`
    command — get this green before writing any real command
 3. Admin roster page + Discord ID linking
-4. `/my-qr` → redeem link → phone QR (was a one-time QR; see §5a)
+4. `/sign-in` → redeem link → QR issue (no IP check yet, log IPs only)
 5. Kiosk page: scan → `/api/scan` → name + photo display
 6. Backup code path
 7. Nightly cron: heartbeat + export (closing sessions is manual, see §8)
 8. Digest and flags
 9. Mentor override
-10. ~~IP enforcement~~ — dropped with the permanent QR (§6)
+10. **IP enforcement last**, once two weeks of logged addresses show what the
+    school's egress actually looks like
 
 Steps 1–5 are the working system. Everything after is hardening.
 
 ## 13. Open questions
 
+- Confirm the school's egress IP set from real data before step 10.
 - Photo storage: photos of minors. Agree a retention policy with mentors
   before collecting any, and tell members the system exists. Recommend
   roster photos only — do not capture a frame at sign-in time.

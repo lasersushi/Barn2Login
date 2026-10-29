@@ -31,7 +31,7 @@ export async function listMembers(): Promise<Member[]> {
   `;
 }
 
-// For /my-qr: makes sure the person running it has an active row with
+// For /sign-in: makes sure the person running it has an active row with
 // their current Discord name, creating it the first time.
 export async function upsertMember(person: RosterPerson): Promise<Member> {
   const { firstName, lastName } = splitName(person.displayName);

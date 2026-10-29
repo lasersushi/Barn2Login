@@ -2,10 +2,8 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { POST as scanRoute } from "@/app/api/scan/route";
 import { BADGE_PREFIX, issueBadge, listBadgeHolders, revokeBadge } from "@/db/badges";
-import { scanMemberToken } from "@/db/sessions";
+import { scanBadge } from "@/db/sessions";
 import { sql } from "./db-client";
-
-const scanBadge = (token: string) => scanMemberToken("badge", token);
 
 async function addMember(active = true) {
   const [m] = await sql<{ id: string }[]>`
@@ -50,7 +48,7 @@ describe("issueBadge", () => {
 });
 
 describe("scanBadge", () => {
-  it("checks in unflagged, then checks out on a later scan", async () => {
+  it("checks in flagged, then checks out on a later scan", async () => {
     const memberId = await addMember();
     const badge = await badgeFor(memberId);
 
@@ -60,7 +58,7 @@ describe("scanBadge", () => {
 
     const sessions = await sql`select source, closed_by, flags, ip_status from sessions`;
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]).toMatchObject({ source: "qr", closed_by: "tap", flags: [], ip_status: null });
+    expect(sessions[0]).toMatchObject({ source: "qr", closed_by: "tap", flags: ["badge"], ip_status: null });
   });
 
   it("ignores the same badge again within a minute", async () => {

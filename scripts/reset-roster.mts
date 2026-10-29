@@ -35,7 +35,7 @@ try {
     await sql.begin(async (tx) => {
       for (const table of TABLES) await tx`delete from ${tx(table)}`;
     });
-    console.log("\nDeleted. The roster refills from Discord the next time /admin is opened or someone runs /my-qr.");
+    console.log("\nDeleted. The roster refills from Discord the next time /admin is opened or someone runs /sign-in.");
   }
 } finally {
   await sql.end();
