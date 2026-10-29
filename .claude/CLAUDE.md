@@ -36,10 +36,10 @@ our API, never to Supabase directly.
 `sha256` of the token, never the token itself. This applies to member tokens,
 QR tokens, and backup codes.
 
-**6. Nothing is ever hard-blocked on a location signal.**
-IP checks produce a flag, never a rejection. The only exception is the
-documented one: a QR code is not *issued* without an on-campus IP. Once
-issued, redemption always succeeds if the token is valid.
+**6. Nothing is ever blocked on a location signal.**
+There is no IP check (Design.md §6 was dropped). The defense against someone
+scanning for an absent member is the kiosk saying the name out loud, plus
+the nightly digest. A valid, unreplaced QR or badge always scans.
 
 **7. Never invent a schema change to make a feature easier.**
 If the spec seems to require a new column, say so and ask.

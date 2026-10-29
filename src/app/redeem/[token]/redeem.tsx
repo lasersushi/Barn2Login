@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Issued = { firstName: string; qrDataUrl: string; expiresAt: string };
+type Issued = { firstName: string; qrDataUrl: string };
 type State = { status: "loading" } | { status: "error"; message: string } | ({ status: "ok" } & Issued);
 
 export function Redeem({ token }: { token: string }) {
@@ -36,11 +36,14 @@ export function Redeem({ token }: { token: string }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={state.qrDataUrl} alt="Your sign-in QR code" className="w-full rounded-lg bg-white" />
           <p className="text-lg">
-            Scan this at the kiosk. Works once, until <strong>{state.expiresAt}</strong>.
+            This is your permanent sign-in code. Scan it at the kiosk every time you arrive and leave.
           </p>
           <ul className="space-y-1 text-sm text-zinc-500">
-            <li>Turn your screen brightness up.</li>
-            <li>Long-press the code to save it to Photos in case this page closes.</li>
+            <li>
+              <strong>Long-press the code and save it to Photos now.</strong> This page can&apos;t show it again.
+            </li>
+            <li>Turn your screen brightness up when you scan.</li>
+            <li>Running /my-qr again makes a new code and turns this one off.</li>
           </ul>
         </>
       )}

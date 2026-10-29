@@ -11,8 +11,8 @@ const commands = [
     description: "Check that the sign-in bot is alive",
   },
   {
-    name: "sign-in",
-    description: "Get a one-time QR code to scan at the kiosk (signs you in or out)",
+    name: "my-qr",
+    description: "Get your permanent QR code to scan at the kiosk (signs you in or out)",
   },
   {
     name: "sign-out-all",
