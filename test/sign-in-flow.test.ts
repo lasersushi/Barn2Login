@@ -229,6 +229,25 @@ describe("/my-qr command", () => {
     expect(res.data?.content).toMatch(/redeem/);
   });
 
+  it("sends no link to a member who already has a QR, so their saved one keeps working", async () => {
+    const id = await addMember({ discordId: "ada-discord" });
+    const qr = await phoneQrFor(id);
+    const res = await handleCommand(interaction("ada-discord", ["role-member"]));
+    expect(res.data?.content).toMatch(/already have/);
+    expect(res.data?.content).not.toMatch(/redeem/);
+    expect(await scanPhone(qr)).toMatchObject({ ok: true });
+  });
+
+  it("sends a link to a member who already has a QR when they pass reset", async () => {
+    const id = await addMember({ discordId: "ada-discord" });
+    await phoneQrFor(id);
+    const res = await handleCommand({
+      ...interaction("ada-discord", ["role-member"]),
+      data: { name: "my-qr", options: [{ name: "reset", type: 5, value: true }] },
+    });
+    expect(res.data?.content).toMatch(/https:\/\/barn2\.test\/redeem\/[\w-]{43}/);
+  });
+
   it("reuses the same row, picking up a new nickname and reactivating", async () => {
     const id = await addMember({ discordId: "ada-discord", active: false });
     await handleCommand(interaction("ada-discord", ["role-member"], "Ada King"));

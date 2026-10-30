@@ -13,6 +13,14 @@ const commands = [
   {
     name: "my-qr",
     description: "Get your permanent QR code to scan at the kiosk (signs you in or out)",
+    options: [
+      {
+        name: "reset",
+        description: "Lost your code? Make a new one and turn the old one off",
+        type: 5, // BOOLEAN
+        required: false,
+      },
+    ],
   },
   {
     name: "sign-out-all",

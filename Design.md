@@ -202,9 +202,12 @@ Four paths. Each proves something different.
 6. Kiosk displays name + photo full-size, and on check-out, session duration.
    It also **says the name out loud**: "Welcome, Ada" / "Bye, Ada".
 
-- Running `/my-qr` again replaces the hash, so the old QR stops working. That
-  is how a lost or leaked QR gets turned off. The token can't be shown again
-  later; only its hash is kept.
+- A member who already has a QR gets no link from `/my-qr`. The bot tells
+  them to use the one in Photos. Without this, someone could tap a new link
+  "just to check" and turn off the QR they saved.
+- `/my-qr reset:True` sends the link anyway. Tapping it replaces the hash, so
+  the old QR stops working. That is how a lost or leaked QR gets turned off.
+  The token can't be shown again later; only its hash is kept.
 - A scan is ignored for one minute after the member's last check-in or
   check-out, so a phone held in front of the camera doesn't sign in and
   straight back out.
@@ -315,7 +318,7 @@ Explicitly bounded. This is a high school team.
 | Friend scans for an absent member (shared QR or borrowed badge) | Kiosk says the name out loud in the middle of the shop; nightly digest | Accepted — needs a friend willing to do it in front of the team |
 | Sign in and leave immediately | Hours require a closed session; both taps needed | Mentor review |
 | Brute-forcing backup codes | Rate limit + single use + short TTL | Negligible |
-| Leaked QR or lost badge | Member runs `/my-qr` again; mentor revokes or reissues the badge | Works until replaced |
+| Leaked QR or lost badge | Member runs `/my-qr reset:True`; mentor revokes or reissues the badge | Works until replaced |
 
 **What is deliberately not defended against:** a member who hands their QR to
 a friend, and a friend who scans it without anyone noticing the name. The team

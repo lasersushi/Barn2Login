@@ -16,7 +16,7 @@ export type PhoneQrResult = { ok: true; qrText: string; firstName: string } | { 
 
 // The member tapped the one-time link from /my-qr. Each redemption makes a
 // new token and replaces the hash, so the member's previous QR stops
-// working: running /my-qr again is how a lost or leaked QR gets turned off.
+// working: /my-qr reset:True is how a lost or leaked QR gets turned off.
 // The token can't be shown again later, since only its hash is kept.
 export async function redeemForPhoneQr(redeemToken: string): Promise<PhoneQrResult> {
   return db().begin(async (tx) => {

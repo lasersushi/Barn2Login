@@ -32,6 +32,10 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
 //
 // Having the member role is what puts someone on the roster, so their first
 // /my-qr creates their row; nobody has to add them first.
+//
+// A member who already has a QR gets no link unless they pass reset:True.
+// Tapping a link replaces the old QR, so this stops someone from turning
+// off the QR in their Photos by accident.
 async function myQr(interaction: Interaction): Promise<InteractionResponse> {
   // In a DM there's no member, so no roles to check.
   const discord = interaction.member;
@@ -44,6 +48,14 @@ async function myQr(interaction: Interaction): Promise<InteractionResponse> {
     discordId: discord.user.id,
     displayName: discordDisplayName(discord.nick, discord.user),
   });
+
+  const reset = interaction.data?.options?.find((o) => o.name === "reset")?.value === true;
+  if (member.has_phone_qr && !reset) {
+    return reply(
+      `You already have a sign-in QR code. Find it in your Photos and scan that one. ` +
+        `Lost it? Run /my-qr again with reset set to True. That makes a new code and turns the old one off.`,
+    );
+  }
 
   const { token } = await issueRedeemCode(member.id);
   const link = `${requireEnv("APP_BASE_URL")}/redeem/${token}`;

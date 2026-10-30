@@ -43,7 +43,7 @@ export function Redeem({ token }: { token: string }) {
               <strong>Long-press the code and save it to Photos now.</strong> This page can&apos;t show it again.
             </li>
             <li>Turn your screen brightness up when you scan.</li>
-            <li>Running /my-qr again makes a new code and turns this one off.</li>
+            <li>Lost it? Run /my-qr with reset set to True. That makes a new code and turns this one off.</li>
           </ul>
         </>
       )}
