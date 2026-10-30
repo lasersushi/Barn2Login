@@ -76,7 +76,7 @@ async function myQr(interaction: Interaction): Promise<InteractionResponse> {
 async function myHours(interaction: Interaction): Promise<InteractionResponse> {
   const discordId = interaction.member?.user.id ?? interaction.user?.id;
   const member = discordId ? await findMemberByDiscordId(discordId) : null;
-  if (!member) return reply("You don't have any hours yet. Use /sign-in at a meeting to start.");
+  if (!member) return reply("You don't have any hours yet. Run /my-qr to get your sign-in QR code, then scan it at the kiosk.");
 
   const minutesFor = async (range: Parameters<typeof hoursByMember>[0]) =>
     (await hoursByMember(range)).find((r) => r.id === member.id)?.minutes ?? 0;
