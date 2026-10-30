@@ -31,16 +31,18 @@ export async function listMembers(): Promise<Member[]> {
   `;
 }
 
-// For /sign-in: makes sure the person running it has an active row with
-// their current Discord name, creating it the first time.
-export async function upsertMember(person: RosterPerson): Promise<Member> {
+// For /my-qr: makes sure the person running it has an active row with
+// their current Discord name, creating it the first time. has_phone_qr says
+// whether they've already redeemed a phone QR (Design.md §5a).
+export async function upsertMember(person: RosterPerson): Promise<Member & { has_phone_qr: boolean }> {
   const { firstName, lastName } = splitName(person.displayName);
-  const [member] = await db()<Member[]>`
+  const [member] = await db()<(Member & { has_phone_qr: boolean })[]>`
     insert into members (discord_id, first_name, last_name)
     values (${person.discordId}, ${firstName}, ${lastName})
     on conflict (discord_id) do update
       set first_name = excluded.first_name, last_name = excluded.last_name, active = true
-    returning id, first_name, last_name, grad_year, subteam, discord_id, photo_url, active
+    returning id, first_name, last_name, grad_year, subteam, discord_id, photo_url, active,
+      qr_token_hash is not null as has_phone_qr
   `;
   return member;
 }

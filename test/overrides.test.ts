@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { overrideRecordSession, overrideSignIn } from "@/db/overrides";
-import { scanQr } from "@/db/sessions";
-import { issueRedeemCode, redeemForQr } from "@/db/codes";
+import { issueRedeemCode } from "@/db/codes";
+import { PHONE_QR_PREFIX, redeemForPhoneQr } from "@/db/phone-qr";
+import { scanMemberToken } from "@/db/sessions";
 import { sql } from "./db-client";
 
 async function addMember(fields: { active?: boolean; gradYear?: number | null } = {}) {
@@ -59,9 +60,12 @@ describe("overrideSignIn", () => {
     const [memberId, mentorId] = [await addMember(), await mentor()];
     await overrideSignIn({ memberId, mentorId, note: null });
     const { token } = await issueRedeemCode(memberId);
-    const qr = await redeemForQr(token, null);
+    const qr = await redeemForPhoneQr(token);
     if (!qr.ok) throw new Error("redeem failed");
-    expect(await scanQr(qr.token)).toMatchObject({ ok: true, action: "check_out" });
+    // Past the one-minute repeat window.
+    await sql`update sessions set check_in_at = check_in_at - interval '2 hours'`;
+    const scanned = await scanMemberToken("phone", qr.qrText.slice(PHONE_QR_PREFIX.length));
+    expect(scanned).toMatchObject({ ok: true, action: "check_out" });
   });
 });
 

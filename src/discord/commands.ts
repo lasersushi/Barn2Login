@@ -21,8 +21,8 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
   switch (interaction.data?.name) {
     case "ping":
       return reply("Pong!");
-    case "sign-in":
-      return signIn(interaction);
+    case "my-qr":
+      return myQr(interaction);
     case "hours":
       return myHours(interaction);
     case "sign-out-all":
@@ -32,16 +32,19 @@ export async function handleCommand(interaction: Interaction): Promise<Interacti
   }
 }
 
-// Design.md §5a steps 1–2: reply privately with a one-time link. Tapping it
-// is the only moment we see the member's real IP; Discord's servers are the
-// ones calling this route.
+// Design.md §5a: reply privately with a one-time link to the member's
+// permanent QR. The link keeps the long-lived token out of Discord.
 //
 // Having the member role is what puts someone on the roster, so their first
-// /sign-in creates their row; nobody has to add them first.
-async function signIn(interaction: Interaction): Promise<InteractionResponse> {
+// /my-qr creates their row; nobody has to add them first.
+//
+// A member who already has a QR gets no link unless they pass reset:True.
+// Tapping a link replaces the old QR, so this stops someone from turning
+// off the QR in their Photos by accident.
+async function myQr(interaction: Interaction): Promise<InteractionResponse> {
   // In a DM there's no member, so no roles to check.
   const discord = interaction.member;
-  if (!discord) return reply("Run /sign-in in the Barn 2 server.");
+  if (!discord) return reply("Run /my-qr in the Barn 2 server.");
   if (!belongsOnRoster(discord.roles)) {
     return reply("You need the member role in the Barn 2 server to sign in. Ask leadership if that's a mistake.");
   }
@@ -51,10 +54,19 @@ async function signIn(interaction: Interaction): Promise<InteractionResponse> {
     displayName: discordDisplayName(discord.nick, discord.user),
   });
 
+  const reset = interaction.data?.options?.find((o) => o.name === "reset")?.value === true;
+  if (member.has_phone_qr && !reset) {
+    return reply(
+      `You already have a sign-in QR code. Find it in your Photos and scan that one. ` +
+        `Lost it? Run /my-qr again with reset set to True. That makes a new code and turns the old one off.`,
+    );
+  }
+
   const { token } = await issueRedeemCode(member.id);
   const link = `${requireEnv("APP_BASE_URL")}/redeem/${token}`;
   return reply(
-    `Tap to get your sign-in QR code (works once, expires in ${REDEEM_TTL_MIN} minutes):\n${link}`,
+    `Tap to get your permanent sign-in QR code. Save it to Photos and scan it every time you arrive and leave. ` +
+      `(Link works once, expires in ${REDEEM_TTL_MIN} minutes. Getting a new code turns your old one off.)\n${link}`,
     SUPPRESS_EMBEDS,
   );
 }

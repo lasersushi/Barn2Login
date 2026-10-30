@@ -27,9 +27,9 @@ export default async function BadgesPage() {
 
       <section className="flex flex-col gap-3">
         <p className="text-sm text-zinc-500 print:hidden">
-          A printed QR for members without a phone. It works at the kiosk until you revoke it, so anyone holding it
-          can scan it: every badge sign-in is flagged for review. The code is shown once. To reprint, make a new
-          badge, which stops the old one working.
+          A printed QR for members without a phone. It works at the kiosk until you revoke it, and the kiosk says the
+          member&apos;s name out loud on every scan. The code is shown once. To reprint, make a new badge, which stops
+          the old one working. A badge doesn&apos;t affect the member&apos;s phone QR from /my-qr.
         </p>
         <MakeBadge members={options} />
       </section>
