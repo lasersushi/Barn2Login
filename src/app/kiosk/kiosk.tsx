@@ -14,21 +14,75 @@ type ScanResponse =
     }
   | { ok: false; message: string };
 
+export type VoicePack = "teto";
+type Action = "check_in" | "check_out";
+type Clips = Record<Action, AudioBuffer>;
+
+const CLIP_FILES: Record<Action, string> = {
+  check_in: "check-in.mp3",
+  check_out: "check-out.mp3",
+};
+
 const RESULT_SHOWN_MS = 4000;
 // The camera keeps seeing the same phone while the result is on screen.
 const SAME_CODE_IGNORE_MS = 15_000;
 
-export function Kiosk() {
+export function Kiosk({ voicePack }: { voicePack: VoicePack | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const armedRef = useRef(false);
   const busyRef = useRef(false);
   const lastRef = useRef<{ token: string; at: number } | null>(null);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const clipsRef = useRef<Clips | null>(null);
+  const playingRef = useRef<{ source: AudioBufferSourceNode; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const [armed, setArmed] = useState(false);
   const [result, setResult] = useState<ScanResponse | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // The character clip, then the first name in the plain voice. The name is
+  // the part the shop has to catch, so it never goes in the character voice.
+  const greet = useCallback((action: Action, firstName: string) => {
+    // A second scan cuts off the first greeting. Detach before stopping, or
+    // the old clip's onended would still say the old name.
+    const playing = playingRef.current;
+    if (playing) {
+      playing.source.onended = null;
+      clearTimeout(playing.timer);
+      playing.source.stop();
+      playingRef.current = null;
+    }
+
+    const ctx = audioCtxRef.current;
+    const clip = clipsRef.current?.[action];
+    if (!ctx || !clip || ctx.state !== "running") {
+      // Safari can suspend the context, e.g. after the tab was backgrounded.
+      // Try to wake it for next time; this scan uses the plain voice.
+      ctx?.resume().catch(() => {});
+      speak(`${action === "check_in" ? "Welcome" : "Bye"}, ${firstName}`, voiceRef.current);
+      return;
+    }
+
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+    const source = ctx.createBufferSource();
+    source.buffer = clip;
+    source.connect(ctx.destination);
+    let said = false;
+    function sayName() {
+      if (said) return;
+      said = true;
+      clearTimeout(timer);
+      playingRef.current = null;
+      speak(firstName, voiceRef.current);
+    }
+    source.onended = sayName;
+    // onended can go missing if Safari interrupts the context mid-clip.
+    const timer = setTimeout(sayName, clip.duration * 1000 + 500);
+    playingRef.current = { source, timer };
+    source.start();
+  }, []);
 
   const onDecode = useCallback(async ({ data }: QrScanner.ScanResult) => {
     const now = Date.now();
@@ -48,10 +102,7 @@ export function Kiosk() {
       setResult(scanned);
       // Saying the name out loud is the check that the person scanning is
       // the person signing in: everyone in the shop hears it.
-      if (scanned.ok) {
-        const greeting = scanned.action === "check_in" ? "Welcome" : "Bye";
-        speak(`${greeting}, ${scanned.firstName}`, voiceRef.current);
-      }
+      if (scanned.ok) greet(scanned.action, scanned.firstName);
     } catch {
       setResult({ ok: false, message: "Couldn't reach the server. Check the iPad's Wi-Fi." });
     }
@@ -60,13 +111,16 @@ export function Kiosk() {
       setResult(null);
       busyRef.current = false;
     }, RESULT_SHOWN_MS);
-  }, []);
+  }, [greet]);
 
   // Safari only grants the camera from a user gesture, hence the Start button.
   // Speech needs one too, and only counts it before the first await. Saying
-  // something here unlocks it, and checks the volume is up.
+  // something here unlocks it, and checks the volume is up. The character
+  // clips' AudioContext needs the same gesture. "Sign-in ready" stays in the
+  // plain voice: it is what unlocks speech for the names.
   const start = useCallback(async () => {
     speak("Sign-in ready", voiceRef.current);
+    audioCtxRef.current?.resume().catch(() => {});
     if (!videoRef.current) return;
     // Loaded on demand: the library touches browser-only APIs, and client
     // components are still rendered once on the server.
@@ -97,6 +151,33 @@ export function Kiosk() {
     speechSynthesis.addEventListener("voiceschanged", pick);
     return () => speechSynthesis.removeEventListener("voiceschanged", pick);
   }, []);
+
+  // One context for every clip: it can be created now, but only plays once
+  // Start resumes it. Clips that fail to load just leave the plain voice.
+  useEffect(() => {
+    if (!voicePack || typeof AudioContext === "undefined") return;
+    const ctx = new AudioContext();
+    audioCtxRef.current = ctx;
+    let cancelled = false;
+    async function load(action: Action) {
+      const res = await fetch(`/voice/${voicePack}/${CLIP_FILES[action]}`);
+      if (!res.ok) throw new Error(`${CLIP_FILES[action]}: ${res.status}`);
+      return ctx.decodeAudioData(await res.arrayBuffer());
+    }
+    Promise.all([load("check_in"), load("check_out")])
+      .then(([checkIn, checkOut]) => {
+        if (!cancelled) clipsRef.current = { check_in: checkIn, check_out: checkOut };
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (playingRef.current) clearTimeout(playingRef.current.timer);
+      playingRef.current = null;
+      clipsRef.current = null;
+      audioCtxRef.current = null;
+      ctx.close().catch(() => {});
+    };
+  }, [voicePack]);
 
   // The camera stream dies when the tab is backgrounded. Stop cleanly and
   // re-arm on return; if Safari refuses without a gesture, show Start again.
