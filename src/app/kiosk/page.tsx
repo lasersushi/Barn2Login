@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { isKioskPage } from "@/lib/auth";
 import { setUpKiosk } from "./actions";
-import { Kiosk } from "./kiosk";
+import { Kiosk, type VoicePack } from "./kiosk";
+
+// Optional: a character clip played before each greeting. Clips live in
+// public/voice/<pack>/. Unset or unknown means the plain voice only.
+const VOICE_PACKS: readonly VoicePack[] = ["teto"];
+
+function voicePack(): VoicePack | null {
+  const value = process.env.KIOSK_VOICE_PACK;
+  return VOICE_PACKS.find((pack) => pack === value) ?? null;
+}
 
 export const metadata: Metadata = {
   title: "Barn 2 Kiosk",
@@ -13,7 +22,7 @@ export default async function KioskPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  if (await isKioskPage()) return <Kiosk />;
+  if (await isKioskPage()) return <Kiosk voicePack={voicePack()} />;
 
   const { error } = await searchParams;
   return (

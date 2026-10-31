@@ -418,6 +418,19 @@ it before anyone complains.
   doubles as a volume check. Download an Enhanced or Premium English voice
   (Settings → Accessibility → Spoken Content → Voices); the kiosk picks one
   if Safari exposes it, else the default.
+- **Character voice (optional).** With `KIOSK_VOICE_PACK=teto` set in Vercel,
+  each greeting starts with a short Kasane Teto clip
+  (`public/voice/teto/check-in.mp3`, `check-out.mp3`), then the plain voice
+  says the first name. The name never goes in the character voice: it is
+  the part the shop has to catch. Unset, or a clip that fails to load, means
+  the plain "Welcome, Sam" as before. The clips are rendered by hand in Teto
+  voice software (there is no cloud API for her voice) and kept under about
+  1.5 seconds. Before committing clips, confirm the product's license allows
+  non-commercial public playback and serving the files from this site, and
+  record the product and its terms URL here. Plain `speechSynthesis` still
+  says "Sign-in ready" on Start, because that is what unlocks speech for
+  the names. Hatsune Miku has no official speaking voice, so she is not an
+  option; unofficial "Miku TTS" clones are not licensed.
 - `getUserMedia` requires a user gesture, so the page needs a "Start" button
   after load. The camera dies when the tab backgrounds — handle
   `visibilitychange` and re-arm.
